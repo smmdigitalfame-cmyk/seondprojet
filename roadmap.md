@@ -1,0 +1,22 @@
+# Roadmap
+- [x] Fix scraper provider normalization, merging, ordering, and engagement fields
+- [x] Reduce clone response latency and deploy scraper
+- [x] Optimize active/adjacent video playback and fallback behavior
+- [x] Render Home video posts correctly and improve story preloading
+- [x] Validate build, runtime, and mobile playback flows
+- [x] Make every Reel Insights graph directly editable and verify saved curves persist
+- [x] Add tap-to-draw editing to the Professional Dashboard Overview graph
+- [x] Make reel edits persist by stable identity and recover missing thumbnails
+- [x] Make Professional Dashboard graph saves recover from full storage on affected phones
+- [x] Make the Professional Dashboard blue-tick save recover from duplicated legacy storage
+- [x] Preserve partially drawn graph width when saving Insights curves
+- [x] Match Reel Insights metric and Summary loading reveal animation
+- [x] Match Reel Insights metric placeholder size and simultaneous reveal timing to the reference recording
+- [x] Match Reel Insights Summary loading cards without internal placeholder shadows
+- [x] Keep Professional Dashboard edits (graph dates/points) saved after going back
+- [x] Keep reel edits after back, refresh, app restart, and re-cloning the account
+- [x] Match Reel Insights spacing and green rate-comparison labels to Instagram
+- [x] Match the Views over time filter-to-graph and graph-to-rates spacing to the voice reference
+- [x] Add a 60-second how-to video beneath the access-key field
+- [x] Add an easy 4K download beneath the how-to video
+- [x] Match the highlighted Overview heading, filter, graph, and next-section gaps to the October 9 real screenshot
