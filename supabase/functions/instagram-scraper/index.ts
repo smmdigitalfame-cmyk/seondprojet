@@ -15,6 +15,8 @@
 //   → { username, profile, reels[], posts[], highlights[] }
 // ---------------------------------------------------------------------------
 
+import { parseProfileHtml, profileCounts } from "./profileCounts.ts";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -492,9 +494,7 @@ async function looterProfileOnly(username: string) {
       bio: firstString(info.biography),
       avatarUrl: firstString(info.profile_pic_url_hd, info.profile_pic_url),
       isVerified: !!info.is_verified,
-      followers: firstNumber(info.edge_followed_by?.count, info.follower_count),
-      following: firstNumber(info.edge_follow?.count, info.following_count),
-      postsCount: firstNumber(info.edge_owner_to_timeline_media?.count, info.media_count),
+      ...profileCounts(info),
       category: firstString(info.category_name, info.business_category_name),
       externalUrl: firstString(info.external_url),
     },
@@ -636,19 +636,31 @@ const parseShortCount = (raw: string): number => {
 };
 
 async function igHtmlProfile(username: string) {
-  try {
-    const r = await fetch(`https://www.instagram.com/${encodeURIComponent(username)}/`, {
+  // Instagram intermittently returns a login wall or empty 201 response.
+  // Retry another public-page variant rather than storing fabricated zeros.
+  for (let attempt = 0; attempt < 3; attempt++) {
+   try {
+    const profileUrl = attempt === 2
+      ? `https://www-instagram-com.translate.goog/${encodeURIComponent(username)}/?_x_tr_sl=auto&_x_tr_tl=en&_x_tr_hl=en`
+      : `https://www.instagram.com/${encodeURIComponent(username)}/${attempt === 1 ? "?hl=en" : ""}`;
+    const r = await fetch(profileUrl, {
       headers: {
-        "User-Agent": "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)",
+        "User-Agent": attempt === 1 ? IG_HEADERS["User-Agent"] : "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)",
         "Accept-Language": "en-US,en;q=0.9",
       },
-      signal: AbortSignal.timeout(12_000),
+      signal: AbortSignal.timeout(6000),
     });
     if (!r.ok) {
       console.warn(JSON.stringify({ event: "ig_html_non_ok", username, status: r.status }));
-      return null;
+      continue;
     }
     const html = await r.text();
+    const parsed = parseProfileHtml(html, username);
+    if (parsed && parsed.followers !== undefined && parsed.following !== undefined) {
+      console.log(JSON.stringify({ event: "ig_html_counts_ok", username, followers: parsed.followers, following: parsed.following, attempt }));
+      return parsed;
+    }
+    if (attempt < 2) continue;
     const meta = (prop: string) => {
       const m = html.match(new RegExp(`<meta[^>]+property="${prop}"[^>]+content="([^"]*)"`, "i"));
       return m ? decodeHtml(m[1]) : "";
@@ -678,8 +690,9 @@ async function igHtmlProfile(username: string) {
     return profile;
   } catch (e) {
     console.warn(JSON.stringify({ event: "ig_html_err", username, err: (e as Error).message }));
-    return null;
   }
+  }
+  return null;
 }
 
 // Shared wall-clock budget for paginated loops so a big clone returns what it
@@ -1485,8 +1498,8 @@ async function buildForUsername(username: string, pages = 4, lite = false) {
       // Exact source first, then whatever provider gave media, then public page.
       avatarUrl: realAvatar(lp.avatarUrl) || realAvatar(p.avatarUrl) || realAvatar(feedAvatar) || realAvatar(hp.avatarUrl) || "",
       isVerified: !!(lp.isVerified || p.isVerified),
-      followers: lp.followers || p.followers || hp.followers || 0,
-      following: lp.following || p.following || hp.following || 0,
+      followers: lp.followers || p.followers || hp.followers || zylaData?.profile?.followers || alphaData?.profile?.followers || publicData?.profile?.followers || 0,
+      following: lp.following ?? hp.following ?? (p.following || zylaData?.profile?.following || alphaData?.profile?.following || publicData?.profile?.following || 0),
       postsCount: lp.postsCount || hp.postsCount || p.postsCount || 0,
       category: p.category || lp.category || "",
       externalUrl: p.externalUrl || lp.externalUrl || "",
@@ -1865,7 +1878,7 @@ Deno.serve(async (req) => {
     }
     // A full clone payload is a superset of the lite one, so either can serve lite.
     const candidates = lite ? await Promise.all([dbCacheGet(liteKey), dbCacheGet(fullKey)]) : [await dbCacheGet(fullKey)];
-    const db = candidates.filter(Boolean).sort((a, b) => b!.at - a!.at)[0] || null;
+    const db = candidates.filter((entry): entry is CacheRec => !!entry && Number(entry.payload?.profile?.followers) > 0).sort((a, b) => b.at - a.at)[0] || null;
     if (db && Date.now() - db.at < DB_STALE_MS) {
       const age = Date.now() - db.at;
       if (age >= DB_FRESH_MS && !REFRESHING.has(myKey)) {
