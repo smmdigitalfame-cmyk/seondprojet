@@ -13,5 +13,8 @@
       { "key": "Service-Worker-Allowed", "value": "/" }
     ] }
   ],
-  "rewrites": [{ "source": "/((?!\\.well-known/|assets/|.*\\.[^/]+$).*)", "destination": "/index.html" }]
+  "rewrites": [
+    { "source": "/__l5e/assets-v1/:path*", "destination": "https://repo-clone-buddy-16.lovable.app/__l5e/assets-v1/:path*" },
+    { "source": "/((?!\\.well-known/|assets/|.*\\.[^/]+$).*)", "destination": "/index.html" }
+  ]
 }
