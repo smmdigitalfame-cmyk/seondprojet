@@ -1,0 +1,15 @@
+import { describe, expect, it } from "vitest";
+import associations from "../../public/.well-known/assetlinks.json";
+
+describe("Android trusted app association", () => {
+  it("uses the supplied APK package and signing certificate", () => {
+    expect(associations).toEqual([{
+      relation: ["delegate_permission/common.handle_all_urls"],
+      target: {
+        namespace: "android_app",
+        package_name: "app.vercel.seondprojet.twa",
+        sha256_cert_fingerprints: ["03:B9:EB:FD:E0:A9:A0:DB:4E:E8:93:13:D2:C5:23:84:A6:05:C0:28:DB:CA:54:61:D0:C5:9C:6A:5A:54:02:89"],
+      },
+    }]);
+  });
+});
