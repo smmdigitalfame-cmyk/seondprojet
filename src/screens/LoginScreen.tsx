@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { ArrowRight, AlertTriangle, X, Check } from "lucide-react";
+import { ArrowRight, AlertTriangle, X, Check, KeyRound } from "lucide-react";
 import { validateAndLogin, getDeviceFingerprint, saveAuthSession } from "@/lib/auth";
 
 
@@ -144,7 +144,29 @@ const LoginScreen = ({ onLoginSuccess }: LoginScreenProps) => {
                     </button>
                 </div>
 
-
+                <a
+                    href="https://extipsinghtpro.store/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full mt-5 flex items-center justify-center gap-2"
+                    style={{
+                        padding: "13px 16px",
+                        borderRadius: "999px",
+                        border: "1.5px solid rgba(255,150,60,0.45)",
+                        background: "rgba(255,140,40,0.08)",
+                        color: "#ffc98a",
+                        fontSize: "13.5px",
+                        fontWeight: 600,
+                        textDecoration: "none",
+                        letterSpacing: "0.2px",
+                    }}
+                >
+                    <KeyRound size={15} style={{ flexShrink: 0 }} />
+                    <span>Don't have a key? View plans &amp; buy — Monthly · Lifetime</span>
+                </a>
+                <p className="mt-2" style={{ fontSize: 11, color: "rgba(255,230,200,0.4)", textAlign: "center" }}>
+                    extipsinghtpro.store
+                </p>
 
                 <p style={{ marginTop: 18, fontSize: 10.5, color: "rgba(255,230,200,0.3)", textAlign: "center" }}>
                     Device · <span style={{ fontFamily: "'SF Mono', monospace" }}>{deviceId}</span>
