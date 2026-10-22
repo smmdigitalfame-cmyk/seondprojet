@@ -1,4 +1,11 @@
 # Project architecture rules
+- Proxy Lovable Assets paths through an explicit Vercel rewrite before the SPA fallback, so relative CDN pointers remain portable without changing backend settings or duplicating media.
+- Parse public Instagram profile metadata independently of attribute order and retry transient login walls; distinguish missing profile counts from explicitly reported zero and never cache failed zero-follower enrichment as a complete profile.
+- Generate the app-shell worker with vite-plugin-pwa and register only through registerAppWorker; deny dev, preview and iframe registration, use network-first HTML, and never cache OAuth or API calls so installs cannot bypass fresh login checks.
+- Publish Android Digital Asset Links only with user-supplied package/signing credentials and serve them as JSON through Vercel headers; website association verification does not replace APK device verification.
+
+- The existing Vercel deployment uses the external database while the Lovable preview remains managed Cloud; configure Vercel environment variables rather than editing generated client files, so future preview changes cannot silently reverse the production connection.
+- External Telegram deployments must validate `X-Telegram-Bot-Api-Secret-Token` against `TELEGRAM_WEBHOOK_SECRET` and use `PAYMENT_PAGE_URL` for payment links, so admin commands cannot be forged and links remain on the intended deployment.
 
 - Persist reel edits by stable `sourceId`, using the list index only as a fallback, so cloned-media reordering cannot move edits to another reel.
 - Only close media editors after permanent storage succeeds; temporary blob/base64 uploads must never be reported as saved.

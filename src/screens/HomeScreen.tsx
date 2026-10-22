@@ -166,12 +166,35 @@ const HomeScreen = () => {
   const { posts: discoverPosts, loading: discoverLoading } = useDiscoverFeed();
   const { stories: discoverStories } = useDiscoverStories();
 
+  // Pinned story order reshuffles every 3-5 minutes so positions keep changing.
+  const [pinnedOrder, setPinnedOrder] = useState<string[]>(PINNED_STORY_USERS);
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    const scheduleNext = () => {
+      const delay = (3 + Math.random() * 2) * 60 * 1000; // 3-5 minutes
+      timer = setTimeout(() => {
+        setPinnedOrder((prev) => {
+          const next = [...prev];
+          for (let i = next.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [next[i], next[j]] = [next[j], next[i]];
+          }
+          // Guarantee a visibly different order
+          return next.every((u, i) => u === prev[i]) ? [...next.slice(1), next[0]] : next;
+        });
+        scheduleNext();
+      }, delay);
+    };
+    scheduleNext();
+    return () => clearTimeout(timer);
+  }, []);
+
   // Merge stories: "Your story" (own) always first, then real discover accounts.
   // Fall back to mock stories until discover is available.
   const stories: Story[] = useMemo(() => {
     const pinnedSet = new Set(PINNED_STORY_USERS.map((u) => u.toLowerCase()));
     const own = mockStories.find((s) => s.isOwn);
-    const ownEntry: Story[] = (own ? [own] : []).concat(PINNED_STORY_USERS.map((u) => ({
+    const ownEntry: Story[] = (own ? [own] : []).concat(pinnedOrder.map((u) => ({
       id: `pinned-${u}`,
       username: u,
       avatar: PINNED_STORY_AVATARS[u],
@@ -191,7 +214,7 @@ const HomeScreen = () => {
         poster: s.poster,
       })),
     );
-  }, [discoverStories]);
+  }, [discoverStories, pinnedOrder]);
 
   // Map real Instagram posts → the shape PostCard expects
   const mappedPosts: Post[] = useMemo(

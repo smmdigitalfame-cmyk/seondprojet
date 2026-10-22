@@ -1,4 +1,16 @@
 # Roadmap
+- [x] Restore missing logo/story photos and other CDN assets on existing Vercel app; all six asset URLs load and live home shows logo plus four actual story photos
+- [x] Fix missing followers/following for Whop and verify live clone plus refresh (207K public rounded followers, 107 following, 69 posts; exact-count paid provider remains quota-limited)
+- [x] Prepare manifest, Android icons and production-only service worker for PWABuilder
+- [x] Update the existing GitHub/Vercel app and verify live PWA resources (all HTTP 200; worker active live, absent in preview; JSON association currently empty)
+- [x] Deploy supplied Android Digital Asset Links; live JSON HTTP 200 and Google association linked=true
+- [ ] Confirm APK URL bar is absent on device (requires user to reopen the matching signed APK on their phone)
+- [x] Deliver PWABuilder packaging and keystore instructions; do not build APK
+- [x] Securely obtain external database PAT and select the user's sole project
+- [x] Set up external tables, permissions, storage and functions without deleting old data
+- [x] Update existing Vercel deployment and Telegram connection; preserve UI and features
+- [x] Verify live login, key expiry, signed /gen and /revoke handlers, clone and edit/save
+- [ ] Confirm commands sent from a human Telegram client arrive end-to-end (requires an admin to send /gen and /revoke in Telegram)
 - [x] Fix scraper provider normalization, merging, ordering, and engagement fields
 - [x] Reduce clone response latency and deploy scraper
 - [x] Optimize active/adjacent video playback and fallback behavior

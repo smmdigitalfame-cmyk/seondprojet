@@ -199,6 +199,8 @@ export function applyOverrideToReel(reel: ExtendedPostItem, override?: OverrideD
   }
   if (override.engagementYCenter != null) (next as any).engagementYCenter = override.engagementYCenter;
   if (override.engagementYTop != null) (next as any).engagementYTop = override.engagementYTop;
+  if (override.retentionYCenter != null) (next as any).retentionYCenter = override.retentionYCenter;
+  if (override.retentionYTop != null) (next as any).retentionYTop = override.retentionYTop;
 
   for (const key of INSIGHT_KEYS) {
     if (override[key] === undefined || override[key] === null) continue;

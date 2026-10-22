@@ -5,6 +5,13 @@ const reel = (sourceId: string, views: number, thumbnail = "https://scontent.cdn
   ({ sourceId, thumbnail, caption: "orig", insights: { views, likes: 0, comments: 0, viewsOverTime: [] } }) as any;
 
 describe("saved reel edits survive a re-clone", () => {
+  it("restores edited engagement axis percentages by reel identity", async () => {
+    await mergeAndSaveOverride("engagement-axis", 0, { engagementYTop: 30, engagementYCenter: 15 }, "engagement-a");
+    const restored = applySavedOverridesToReels([reel("other", 5), reel("engagement-a", 10)], "engagement-axis");
+    expect(restored[1].engagementYTop).toBe(30);
+    expect(restored[1].engagementYCenter).toBe(15);
+    expect(restored[0].engagementYTop).toBeUndefined();
+  });
   it("re-applies edits by sourceId after the list order changes", async () => {
     await mergeAndSaveOverride("persist", 0, { caption: "edited A", likes: 777, thumbnail: "https://scontent.cdninstagram.com/old.jpg" }, "a");
     await mergeAndSaveOverride("persist", 1, { caption: "edited B", thumbnail: "https://res.cloudinary.com/x/b.jpg" }, "b");

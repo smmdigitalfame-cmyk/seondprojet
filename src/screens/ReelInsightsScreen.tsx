@@ -296,6 +296,8 @@ const ReelInsightsScreen = () => {
   const [editYTopLabel, setEditYTopLabel] = useState<string>((post as any)?.yTopLabel || "");
   const [editEngagementYCenter, setEditEngagementYCenter] = useState((post as any)?.engagementYCenter ?? 35);
   const [editEngagementYTop, setEditEngagementYTop] = useState((post as any)?.engagementYTop ?? 70);
+  const [editRetentionYCenter, setEditRetentionYCenter] = useState((post as any)?.retentionYCenter ?? 50);
+  const [editRetentionYTop, setEditRetentionYTop] = useState((post as any)?.retentionYTop ?? 100);
 
 
   // Prefer saved viewsOverTime labels (e.g. "0", "12h", "24h") over computed dates
@@ -368,6 +370,7 @@ const ReelInsightsScreen = () => {
       yCenter: editYCenter, yTop: editYTop,
       yCenterLabel: editYCenterLabel, yTopLabel: editYTopLabel,
       engagementYCenter: editEngagementYCenter, engagementYTop: editEngagementYTop,
+      retentionYCenter: editRetentionYCenter, retentionYTop: editRetentionYTop,
       editTypicalTop,
       xDate1: editXDate1, xDate2: editXDate2, xDate3: editXDate3,
       timeRangeMode,
@@ -406,7 +409,7 @@ const ReelInsightsScreen = () => {
     editStartDate, editDisplayDate, editDuration,
     editWatchTime, editAvgWatchTime,
     editSkipRate, editTypicalSkipRate, editRetentionCurve, editEngagementCurve, typicalRetentionCurve,
-    customGraphData, editYCenter, editYTop, editYCenterLabel, editYTopLabel, editEngagementYCenter, editEngagementYTop, editTypicalTop,
+    customGraphData, editYCenter, editYTop, editYCenterLabel, editYTopLabel, editEngagementYCenter, editEngagementYTop, editRetentionYCenter, editRetentionYTop, editTypicalTop,
     editXDate1, editXDate2, editXDate3, timeRangeMode,
     editSources, editCountries, editAgeGroups, editAccountsReached, editFollows, editInteractions,
     editProfileVisits, editAudienceText, postImage, postVideoUrl, postCaption, retentionImageUrl, viewsGraphImageUrl, sourcesImageUrl, actionsImageUrl, interactionsImageUrl, impactsImageUrl,
@@ -647,6 +650,8 @@ const ReelInsightsScreen = () => {
     (reel as any).yTopLabel = editYTopLabel;
     (reel as any).engagementYCenter = editEngagementYCenter;
     (reel as any).engagementYTop = editEngagementYTop;
+    (reel as any).retentionYCenter = editRetentionYCenter;
+    (reel as any).retentionYTop = editRetentionYTop;
     if (postImage !== undefined) reel.thumbnail = postImage;
     if (postCaption !== undefined) reel.caption = postCaption;
     if (postVideoUrl !== undefined) reel.videoUrl = postVideoUrl;
@@ -654,7 +659,7 @@ const ReelInsightsScreen = () => {
     saveReelsData(freshData);
     try { window.dispatchEvent(new CustomEvent("reel-insights-updated", { detail: { index: postIndex, source: "self-insights", scope: reelsScope } })); } catch {}
     console.log("[InsightsPersist] Saved edits for reel", postIndex);
-  }, [isMainAccount, postIndex, reelsScope, editViews, editLikes, editComments, editShares, editSaves, editReposts, editFollowerPct, editGenderMale, editViewRate, editStartDate, editDisplayDate, editDuration, editXDate1, editXDate2, editXDate3, customGraphData, editYCenter, editYTop, editYCenterLabel, editYTopLabel, editEngagementYCenter, editEngagementYTop, editTypicalTop, timeRangeMode, editSkipRate, editTypicalSkipRate, editRetentionCurve, editEngagementCurve, typicalRetentionCurve, editWatchTime, editAvgWatchTime, editSources, editCountries, editAgeGroups, editAccountsReached, editFollows, editInteractions, editProfileVisits, editAudienceText, retentionImageUrl, viewsGraphImageUrl, sourcesImageUrl, actionsImageUrl, interactionsImageUrl, postImage, postCaption, postVideoUrl]);
+  }, [isMainAccount, postIndex, reelsScope, editViews, editLikes, editComments, editShares, editSaves, editReposts, editFollowerPct, editGenderMale, editViewRate, editStartDate, editDisplayDate, editDuration, editXDate1, editXDate2, editXDate3, customGraphData, editYCenter, editYTop, editYCenterLabel, editYTopLabel, editEngagementYCenter, editEngagementYTop, editRetentionYCenter, editRetentionYTop, editTypicalTop, timeRangeMode, editSkipRate, editTypicalSkipRate, editRetentionCurve, editEngagementCurve, typicalRetentionCurve, editWatchTime, editAvgWatchTime, editSources, editCountries, editAgeGroups, editAccountsReached, editFollows, editInteractions, editProfileVisits, editAudienceText, retentionImageUrl, viewsGraphImageUrl, sourcesImageUrl, actionsImageUrl, interactionsImageUrl, postImage, postCaption, postVideoUrl]);
 
   // Graph saves must also update the reel payload synchronously. The override
   // store is the primary source, but ReelDetail/Profile refresh their own reel
@@ -1198,10 +1203,25 @@ const ReelInsightsScreen = () => {
                     <LineChart data={editRetentionCurve} margin={{ top: 5, right: 5, left: -5, bottom: 0 }}>
                       <CartesianGrid horizontal={true} vertical={false} stroke="hsl(var(--border))" strokeOpacity={0.3} />
                       <XAxis dataKey="t" fontSize={10} tickLine={false} axisLine={false} tick={{ fill: 'hsl(var(--muted-foreground))' }} />
-                      <YAxis fontSize={10} tickLine={false} axisLine={false} width={46} domain={[0, 100]} ticks={[0, 50, 100]} tickFormatter={(v: number) => v === 0 ? '0' : `${v}%`} tick={{ fill: 'hsl(var(--muted-foreground))' }} />
+                      <YAxis fontSize={10} tickLine={false} axisLine={false} width={46} domain={[0, editRetentionYTop]} ticks={[0, editRetentionYCenter, editRetentionYTop]} tickFormatter={(v: number) => v === 0 ? '0' : `${v}%`} tick={{ fill: 'hsl(var(--muted-foreground))' }} />
                       <Line type="linear" dataKey="pct" stroke="#E040FB" strokeWidth={5} dot={false} />
                     </LineChart>
                   </ResponsiveContainer>
+                  {(
+
+                    <>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setIsEditMode(true); setEditModal({ label: "Graph top %", value: String(editRetentionYTop), onSave: (v) => setEditRetentionYTop(Math.max(1, v)) }); }}
+                        className={cn("absolute left-0 top-0 w-[46px] h-[24px] rounded z-20", isEditMode ? "bg-primary/15" : "bg-transparent")}
+                        aria-label="Edit retention top percentage"
+                      />
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setIsEditMode(true); setEditModal({ label: "Graph middle %", value: String(editRetentionYCenter), onSave: (v) => setEditRetentionYCenter(Math.max(0, v)) }); }}
+                        className={cn("absolute left-0 top-[38px] w-[46px] h-[24px] rounded z-20", isEditMode ? "bg-primary/15" : "bg-transparent")}
+                        aria-label="Edit retention middle percentage"
+                      />
+                    </>
+                  )}
                 </div>
               )}
             </div>
@@ -1494,16 +1514,21 @@ const ReelInsightsScreen = () => {
                     </ResponsiveContainer>
                   );
                 })()}
-                {isEditMode && (
+                {(
+
                   <>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setEditModal({ label: "Engagement graph top %", value: String(editEngagementYTop), onSave: (v) => setEditEngagementYTop(Math.max(1, v)) }); }}
-                      className="absolute left-0 top-[2px] w-[46px] h-[26px] bg-[hsl(var(--ig-blue))]/15 rounded"
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={(e) => { e.stopPropagation(); setIsEditMode(true); setEditModal({ label: "Engagement graph top %", value: String(editEngagementYTop), onSave: (v) => setEditEngagementYTop(Math.max(1, v)) }); }}
+                      className={cn("absolute left-0 top-0 z-20 w-[46px] h-[24px] p-0 rounded", isEditMode ? "bg-primary/15" : "bg-transparent")}
                       aria-label="Edit engagement top percentage"
                     />
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setEditModal({ label: "Engagement graph middle %", value: String(editEngagementYCenter), onSave: (v) => setEditEngagementYCenter(Math.max(0, v)) }); }}
-                      className="absolute left-0 top-1/2 -translate-y-1/2 w-[46px] h-[26px] bg-[hsl(var(--ig-blue))]/15 rounded"
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={(e) => { e.stopPropagation(); setIsEditMode(true); setEditModal({ label: "Engagement graph middle %", value: String(editEngagementYCenter), onSave: (v) => setEditEngagementYCenter(Math.max(0, v)) }); }}
+                      className={cn("absolute left-0 top-[66px] z-20 w-[46px] h-[24px] p-0 rounded", isEditMode ? "bg-primary/15" : "bg-transparent")}
                       aria-label="Edit engagement middle percentage"
                     />
                   </>
@@ -1807,8 +1832,8 @@ const ReelInsightsScreen = () => {
           return ok;
         }}
         threeLineScale={retentionEditorMode === "engagement"}
-        yCenter={retentionEditorMode === "engagement" ? editEngagementYCenter : 50}
-        yTop={retentionEditorMode === "engagement" ? editEngagementYTop : 100}
+        yCenter={retentionEditorMode === "engagement" ? editEngagementYCenter : editRetentionYCenter}
+        yTop={retentionEditorMode === "engagement" ? editEngagementYTop : editRetentionYTop}
       />
 
       {/* 3 Dot Action Menu */}

@@ -57,18 +57,18 @@ const RetentionEditorModal = ({
     const topPct = Math.max(1, yTop);
     const midPct = Math.min(Math.max(0, yCenter), topPct);
     const valueToScale = (v: number) => {
-        if (!threeLineScale) return Math.max(0, Math.min(100, v)) / 100;
+        if (!threeLineScale) return Math.max(0, Math.min(topPct, v)) / topPct;
         const c = Math.max(0, Math.min(topPct, v));
         const u = c <= midPct ? (midPct === 0 ? 0 : c / midPct) : 1 + (c - midPct) / (topPct - midPct || 1);
         return Math.max(0, Math.min(1, u / 2));
     };
     const scaleToValue = (scale: number) => {
         const s = Math.max(0, Math.min(1, scale));
-        if (!threeLineScale) return s * 100;
+        if (!threeLineScale) return s * topPct;
         const u = s * 2;
         return u <= 1 ? u * midPct : midPct + (u - 1) * (topPct - midPct || 1);
     };
-    const maxVal = threeLineScale ? topPct : 100;
+    const maxVal = topPct;
     const valToY = (v: number) => PT + DH - valueToScale(v) * DH;
     const yToVal = (py: number) => scaleToValue((PT + DH - py) / DH);
 

@@ -283,7 +283,7 @@ export const currentUser: UserProfile = {
   username: "Organicsmm.pro",
   fullName: "OrganicSMM",
   avatar: "/profile-pic.png",
-  bio: "THE ULTIMATE CREATOR TOOL 🛠✨\nCUSTOMIZE YOUR IG ANALYTICS 📊\nGLOBAL REACH SIMULATOR 🌍\n👇 CHANGE YOUR STATS TODAY",
+  bio: "Powerful tools by Larp Insight to customize, manage, and transform your social media insights.",
   posts: 21,
   followers: 12530,
   following: 12,
