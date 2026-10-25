@@ -1,5 +1,4 @@
 import { useState, useRef, useCallback, useMemo, useEffect } from "react";
-import InsightDetailSkeleton from "@/components/InsightDetailSkeleton";
 import { Button } from "@/components/ui/button";
 import * as React from "react";
 
@@ -17,7 +16,6 @@ import RetentionEditorModal from "@/components/RetentionEditorModal";
 import { uploadToCloudinary } from "@/lib/cloudinary";
 import { applyOverrideToReel, getOverrideSync, getReelsAccountKey, mergeAndSaveOverride } from "@/lib/reelsDataStore";
 import { getReelGraphVisibility, setReelGraphVisibility } from "@/lib/reelGraphVisibility";
-import { AnimatePresence, motion } from "framer-motion";
 
 // Seeded pseudo-random number generator
 const seededRandom = (seed: number) => {
@@ -123,18 +121,16 @@ const hasAudienceRows = <T,>(items: T[] | undefined): items is T[] => Array.isAr
 const ReelInsightsScreen = () => {
   const navigate = useNavigate();
   const { id } = useParams();
-  const [isLoading, setIsLoading] = useState(true);
   const [revealStage, setRevealStage] = useState(0);
   useEffect(() => {
-    const pageTimer = setTimeout(() => setIsLoading(false), 120);
-    const metricsTimer = setTimeout(() => setRevealStage(1), 600);
-    const summaryTimer = setTimeout(() => setRevealStage(2), 1500);
+    setRevealStage(0);
+    const metricsTimer = setTimeout(() => setRevealStage(1), 450);
+    const summaryTimer = setTimeout(() => setRevealStage(2), 1400);
     return () => {
-      clearTimeout(pageTimer);
       clearTimeout(metricsTimer);
       clearTimeout(summaryTimer);
     };
-  }, []);
+  }, [id]);
   const searchParams = new URLSearchParams(window.location.search);
   const accountUsername = searchParams.get("account") || "just4abhii";
   const requestedMediaId = searchParams.get("media") || "";
@@ -784,10 +780,8 @@ const ReelInsightsScreen = () => {
     );
   }
 
-  if (isLoading) return <InsightDetailSkeleton />;
-
   return (
-    <div id="insights-main" className="pb-4 bg-background animate-fade-in">
+    <div id="insights-main" className="pb-4 bg-background">
       {/* Header */}
       <header className="sticky top-0 z-40 flex items-center justify-between px-4 py-3.5 bg-background">
         <div className="flex items-center gap-5">
@@ -862,27 +856,12 @@ const ReelInsightsScreen = () => {
           <div key={item.label} className="flex flex-col items-center gap-1.5 cursor-pointer" onClick={() => isEditMode && setEditModal({ label: item.label, value: String(item.val), onSave: item.set })}>
             {item.icon}
             <span className="relative flex h-4 min-w-7 items-center justify-center">
-              <AnimatePresence initial={false} mode="wait">
-                {revealStage >= 1 ? (
-                  <motion.span
-                    key="value"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ duration: 0.14, ease: "easeOut" }}
-                    className="text-[13px] font-medium leading-4 text-foreground"
-                  >
-                    {fmtNum(item.val)}
-                  </motion.span>
-                ) : (
-                  <motion.span
-                    key="placeholder"
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.1 }}
-                    className="block h-4 w-7 rounded-[4px] bg-secondary"
-                    aria-label={`${item.label} loading`}
-                  />
-                )}
-              </AnimatePresence>
+              {revealStage < 1 && (
+                <span className="insights-loading-surface absolute h-4 w-7 rounded-[4px]" aria-label={`${item.label} loading`} />
+              )}
+              <span className={cn("insights-value-reveal text-[13px] font-medium leading-4 text-foreground", revealStage < 1 && "opacity-0")}>
+                {fmtNum(item.val)}
+              </span>
             </span>
           </div>
         ))}
@@ -923,27 +902,17 @@ const ReelInsightsScreen = () => {
                 { label: "Average watch time", value: avgWatchTime, onEdit: () => setEditModal({ label: "Average watch time", value: editAvgWatchTime, isText: true, onSave: ((v: any) => setEditAvgWatchTime(String(v))) as any }) },
                 { label: "Follows", value: String(follows), onEdit: () => setEditModal({ label: "Follows", value: String(follows), onSave: setEditFollows }) },
               ].map((item) => (
-                <motion.div
+                <div
                   key={item.label}
-                  initial={false}
-                  className={cn("min-h-[69px] bg-[#EEF0F2] dark:bg-[#1C1C1E] rounded-xl p-4", isEditMode && "cursor-pointer active:opacity-60")}
+                  className={cn("insights-summary-card relative min-h-[85px] overflow-hidden rounded-xl p-4", isEditMode && "cursor-pointer active:opacity-60")}
                   onClick={() => isEditMode && item.onEdit()}
                 >
-                  <AnimatePresence initial={false}>
-                    {revealStage >= 2 && (
-                      <motion.div
-                        key="summary-value"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ duration: 0.16, ease: "easeOut" }}
-                      >
-                      <span className="text-[12px] text-muted-foreground block mb-1">{item.label}</span>
-                      <span className="text-[20px] font-bold text-foreground">{item.value}</span>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                  {revealStage < 2 && <span className="sr-only" aria-label={`${item.label} loading`} />}
-                </motion.div>
+                  {revealStage < 2 && <span className="insights-loading-surface absolute inset-0" aria-label={`${item.label} loading`} />}
+                  <div className={cn("insights-value-reveal relative", revealStage < 2 && "opacity-0")}>
+                    <span className="text-[12px] text-muted-foreground block mb-1">{item.label}</span>
+                    <span className="text-[20px] font-bold text-foreground">{item.value}</span>
+                  </div>
+                </div>
               ))}
             </div>
           </div>

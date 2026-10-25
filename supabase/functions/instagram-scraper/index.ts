@@ -56,7 +56,40 @@ const maskKey = (k: string) =>
 // ---- access-key gate -------------------------------------------------------
 const KEY_CACHE = new Map<string, { ok: boolean; at: number; label?: string }>();
 
+// Keys created by the bot live on the primary key server; fall back to it when
+// the local lookup rejects, so every app URL accepts the same keys.
+const PRIMARY_KEY_SERVER = "https://xkgjifugwislpbczoduy.supabase.co/functions/v1/";
+const PRIMARY_OK = new Map<string, number>();
+
 async function validateAccessKey(
+  key: string,
+  fp: string,
+): Promise<{ ok: boolean; reason?: string; label?: string; keyMasked?: string }> {
+  const local = await validateAccessKeyLocal(key, fp);
+  if (local.ok || !key || !fp) return local;
+  if (SUPABASE_URL_ENV?.includes("xkgjifugwislpbczoduy")) return local;
+  const cacheKey = `${key}::${fp}`;
+  const okAt = PRIMARY_OK.get(cacheKey);
+  if (okAt && Date.now() - okAt < 5 * 60_000) return { ok: true, label: "User", keyMasked: maskKey(key) };
+  try {
+    const r = await fetch(PRIMARY_KEY_SERVER + "check-key-status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key, deviceFingerprint: fp }),
+      signal: AbortSignal.timeout(8000),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (r.ok && d?.valid !== false) {
+      PRIMARY_OK.set(cacheKey, Date.now());
+      return { ok: true, label: "User", keyMasked: maskKey(key) };
+    }
+    const code = String(d?.code || "");
+    if (["invalid_key", "deactivated", "expired"].includes(code)) return { ok: false, reason: code };
+  } catch (_) { /* keep local result */ }
+  return local;
+}
+
+async function validateAccessKeyLocal(
   key: string,
   fp: string,
 ): Promise<{ ok: boolean; reason?: string; label?: string; keyMasked?: string }> {
@@ -1019,7 +1052,19 @@ async function clipsReelPages(username: string, pages: number, startCursor?: str
   let hasMore = false;
   for (let i = 0; i < Math.max(1, pages); i++) {
     if (i > 0 && pastDeadline()) break;
-    const data = await clipsPost("reels", username, cursor);
+    // One failed page used to throw away every reel already fetched (and with
+    // it every real view count). Keep what we have; retry the first page once.
+    let data: any = null;
+    try {
+      data = await clipsPost("reels", username, cursor);
+    } catch (e) {
+      if (i === 0) {
+        try { data = await clipsPost("reels", username, cursor); } catch { throw e; }
+      } else {
+        console.warn(JSON.stringify({ event: "clips_reels_page_failed", username, page: i, err: (e as Error).message.slice(0, 160) }));
+        break;
+      }
+    }
     const batch = Array.isArray(data?.reels) ? data.reels : [];
     reels.push(...batch.map((r: any, idx: number) => clipsReelItem(r, reels.length + idx)));
     cursor = data?.cursor ? String(data.cursor) : "";
@@ -1035,7 +1080,14 @@ async function clipsPostPages(username: string, pages: number) {
   let hasMore = false;
   for (let page = 0; page < Math.max(1, pages); page++) {
     if (page > 0 && pastDeadline()) break;
-    const data = await clipsPost("posts", username, cursor || undefined);
+    let data: any = null;
+    try {
+      data = await clipsPost("posts", username, cursor || undefined);
+    } catch (e) {
+      if (page === 0) throw e;
+      console.warn(JSON.stringify({ event: "clips_posts_page_failed", username, page, err: (e as Error).message.slice(0, 160) }));
+      break;
+    }
     const timeline =
       data?.posts?.data?.user?.edge_owner_to_timeline_media ??
       data?.data?.user?.edge_owner_to_timeline_media;
@@ -1385,6 +1437,25 @@ const CACHE = new Map<string, CacheRec>();
 const DB_FRESH_MS = 10 * 60 * 1000;
 const DB_STALE_MS = 6 * 60 * 60 * 1000;
 const REFRESHING = new Set<string>();
+
+function mediaExpiresAt(url: string): number | null {
+  try {
+    const u = new URL(url);
+    const exp = u.searchParams.get("exp");
+    if (exp && /^\d{12,14}$/.test(exp)) return Number(exp);
+    const oe = u.searchParams.get("oe");
+    if (oe && /^[0-9a-f]{8}$/i.test(oe)) return parseInt(oe, 16) * 1000;
+  } catch (_) { /* not a url */ }
+  return null;
+}
+
+/** True when the newest media links in a payload have (nearly) expired. */
+function payloadMediaExpired(payload: any): boolean {
+  const items = [...(payload?.reels || []), ...(payload?.posts || [])].slice(0, 6);
+  const stamps = items.map((m: any) => mediaExpiresAt(String(m?.thumbnail || ""))).filter((n): n is number => n !== null);
+  if (!stamps.length) return false;
+  return Math.min(...stamps) - 15 * 60_000 <= Date.now();
+}
 
 async function dbCacheGet(key: string): Promise<CacheRec | null> {
   if (!SUPABASE_URL_ENV || !SUPABASE_SRK) return null;
@@ -1879,7 +1950,9 @@ Deno.serve(async (req) => {
     // A full clone payload is a superset of the lite one, so either can serve lite.
     const candidates = lite ? await Promise.all([dbCacheGet(liteKey), dbCacheGet(fullKey)]) : [await dbCacheGet(fullKey)];
     const db = candidates.filter((entry): entry is CacheRec => !!entry && Number(entry.payload?.profile?.followers) > 0).sort((a, b) => b.at - a.at)[0] || null;
-    if (db && Date.now() - db.at < DB_STALE_MS) {
+    // Signed media links inside a saved payload expire after a few hours;
+    // serving them showed "No preview" everywhere, so rebuild instead.
+    if (db && Date.now() - db.at < DB_STALE_MS && !payloadMediaExpired(db.payload)) {
       const age = Date.now() - db.at;
       if (age >= DB_FRESH_MS && !REFRESHING.has(myKey)) {
         REFRESHING.add(myKey);

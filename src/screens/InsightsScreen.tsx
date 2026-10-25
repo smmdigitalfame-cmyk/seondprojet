@@ -18,6 +18,7 @@ import { getInsightsBackup, setInsightsBackup } from "@/lib/insightsBackup";
 import { useActiveUsernameVersion } from "@/hooks/useActiveUsernameVersion";
 import { getInsightTopReels, formatCompactMetric } from "@/lib/insightTopReels";
 import { loadReelsData } from "@/data/reelInsightsData";
+import { refillContentMedia, savedContentMatchesReels } from "@/lib/insightsContentMedia";
 import { toast } from "sonner";
 
 const PINK = "#D500F9";
@@ -41,6 +42,8 @@ interface BarRow {
 }
 
 interface ContentItemData {
+  sourceId?: string;
+  videoUrl?: string;
   thumbnail: string;
   caption: string;
   age: string;
@@ -229,7 +232,7 @@ const loadInsightsData = (): InsightsData => {
 // otherwise overflow localStorage and block every dashboard save.
 const prepareInsightsForStorage = (value: InsightsData): InsightsData => ({
   ...value,
-  contentItems: value.contentItems?.map((item) => ({ ...item, thumbnail: "" })),
+  contentItems: value.contentItems?.map((item) => ({ ...item, thumbnail: "", videoUrl: undefined })),
 });
 
 /**
@@ -724,15 +727,15 @@ const InsightsScreen = () => {
   const baseContentItems = useMemo<ContentItemData[]>(() => {
     void usernameVersion;
     const reels = loadReelsData();
-    if (data.contentItems && data.contentItems.length) {
-      return data.contentItems.map((item, index) =>
-        item.thumbnail ? item : { ...item, thumbnail: reels[index]?.thumbnail || "" }
-      );
+    if (data.contentItems && data.contentItems.length && savedContentMatchesReels(data.contentItems, reels)) {
+      return refillContentMedia(data.contentItems, reels);
     }
     return reels.map((reel, index) => {
       const ins = reel.insights || ({} as any);
       const views = Number(ins.views) || 0;
       return {
+        sourceId: reel.sourceId,
+        videoUrl: reel.videoUrl,
         thumbnail: reel.thumbnail || "",
         caption: reel.caption || "Reel",
         age: index < 2 ? `${index + 1}d` : `${Math.min(9, Math.ceil((index + 1) / 3))}w`,
@@ -1120,7 +1123,7 @@ const InsightsScreen = () => {
               {contentList.map((item, i) => (
                 <div key={i} className="flex items-start gap-2.5 sm:gap-3 px-3 sm:px-4 py-3">
                   <div className="w-[48px] sm:w-[52px] h-[62px] sm:h-[68px] rounded-[4px] overflow-hidden bg-secondary shrink-0">
-                    {item.thumbnail && <img src={item.thumbnail} alt="" className="w-full h-full object-cover" />}
+                    <VideoThumbnail videoUrl={item.videoUrl || ""} fallbackThumbnail={item.thumbnail} className="w-full h-full object-cover" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-baseline gap-2">

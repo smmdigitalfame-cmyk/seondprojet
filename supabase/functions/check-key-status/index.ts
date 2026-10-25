@@ -50,13 +50,43 @@ async function legacyCheck(key: string, fp: string): Promise<LegacyResult> {
 }
 
 
+// Live key server (the one the Telegram bot writes to). It is the source of
+// truth for keys, so every app URL (Lovable + Vercel) accepts the same keys.
+const PRIMARY_KEY_SERVER = "https://xkgjifugwislpbczoduy.supabase.co/functions/v1/";
+
+async function forwardToPrimary(name: string, raw: string): Promise<{ status: number; text: string } | null> {
+  if (Deno.env.get("SUPABASE_URL")?.includes("xkgjifugwislpbczoduy")) return null;
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 10000);
+    const res = await fetch(PRIMARY_KEY_SERVER + name, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: raw,
+      signal: ctrl.signal,
+    });
+    clearTimeout(t);
+    return { status: res.status, text: await res.text() };
+  } catch {
+    return null;
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
   try {
-    const { key, deviceFingerprint } = await req.json();
+    const raw = await req.text();
+    const primary = await forwardToPrimary("check-key-status", raw);
+    if (primary && primary.status < 500 && !/"invalid_key"/.test(primary.text) && primary.status !== 400) {
+      return new Response(primary.text, {
+        status: primary.status,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const { key, deviceFingerprint } = JSON.parse(raw || "{}");
     const normalizedKey = String(key || "").trim().toUpperCase();
     const normalizedFp = String(deviceFingerprint || "").trim();
 

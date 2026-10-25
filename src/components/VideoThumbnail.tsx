@@ -14,6 +14,8 @@ interface VideoThumbnailProps {
 const useThumbCandidates = (primary: string | undefined, alts: string[] | undefined) => {
   const list = [primary, ...(alts || [])].filter((u): u is string => !!u);
   const [idx, setIdx] = useState(0);
+  const signature = JSON.stringify(list);
+  useEffect(() => setIdx(0), [signature]);
   const fail = () => setIdx((i) => i + 1);
   return { current: list[idx], exhausted: idx >= list.length, fail };
 };
@@ -48,10 +50,16 @@ const VideoThumbnail = ({ videoUrl, fallbackThumbnail, altThumbnails, className 
   }
   const candidate = useThumbCandidates(fallbackThumbnail, [...derivedAlts, ...(altThumbnails || [])]);
 
+  useEffect(() => {
+    setThumbError(0);
+    setPosterFailed(false);
+    setCapturedFrame(null);
+  }, [videoUrl, fallbackThumbnail]);
+
   // ScreenPal thumbnail — prefer fallback image, otherwise use iframe snapshot
   if (isScreenPal) {
-    if (fallbackThumbnail) {
-      return <img src={fallbackThumbnail} alt={alt} className={className} loading="lazy" draggable={false} />;
+    if (!candidate.exhausted && candidate.current) {
+      return <img src={candidate.current} alt={alt} className={className} loading="lazy" draggable={false} onError={candidate.fail} />;
     }
     const videoId = getScreenPalId(videoUrl);
     if (!videoId) {
@@ -71,14 +79,15 @@ const VideoThumbnail = ({ videoUrl, fallbackThumbnail, altThumbnails, className 
   }
 
   if (isStreamable) {
-    if (fallbackThumbnail) {
+    if (!candidate.exhausted && candidate.current) {
       return (
         <img
-          src={fallbackThumbnail}
+          src={candidate.current}
           alt={alt}
           className={className}
           loading="lazy"
           draggable={false}
+          onError={candidate.fail}
         />
       );
     }

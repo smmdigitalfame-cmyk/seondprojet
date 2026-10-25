@@ -1,6 +1,7 @@
 import { mockAccounts, currentUser, saveProfileOverrides, type PostItem } from "@/data/mockData";
 import { fetchInstagramData, proxyIgImage, setConnectedUsername, beginPriorityFetch, endPriorityFetch, type InstaScrapeResult } from "@/lib/instagramApi";
-import { saveReelsData, type ExtendedPostItem } from "@/data/reelInsightsData";
+import { saveReelsData, loadReelsData, type ExtendedPostItem } from "@/data/reelInsightsData";
+import { isMediaUrlExpired } from "@/lib/mediaExpiry";
 
 const MAX_REELS = 350;
 let activeCloneToken = 0;
@@ -333,6 +334,88 @@ function applyCloneData(data: InstaScrapeResult, cloneToken: number) {
       window.dispatchEvent(new CustomEvent("ig-avatar-updated", { detail: { username, avatar: dataUrl } }));
     } catch {}
   });
+}
+
+let mediaRefreshAt = 0;
+let mediaRefreshRunning = false;
+
+/**
+ * Cloned reels keep signed Instagram links that stop working after a few
+ * hours, which turned every thumbnail into "No preview". When the stored links
+ * have expired, quietly fetch fresh links for the connected account and swap
+ * only the media (matched by stable sourceId). Edited stats stay untouched;
+ * a missing (0) public count is filled from the fresh data.
+ */
+export async function refreshExpiredReelMedia(): Promise<boolean> {
+  if (mediaRefreshRunning || Date.now() - mediaRefreshAt < 10 * 60_000) return false;
+  let username = "";
+  try { username = localStorage.getItem("ig_connected_username") || ""; } catch {}
+  if (!username || (currentUser.username || "").toLowerCase() !== username.toLowerCase()) return false;
+  const reels = loadReelsData();
+  const needsRefresh = (r: ExtendedPostItem) =>
+    isMediaUrlExpired(r.thumbnail) || isMediaUrlExpired(r.videoUrl);
+  if (!reels.some(needsRefresh)) return false;
+
+  mediaRefreshRunning = true;
+  mediaRefreshAt = Date.now();
+  const token = activeCloneToken;
+  try {
+    let data = await fetchInstagramData(username, "all", { pages: 30, background: true });
+    const firstThumb = [...(data.reels ?? []), ...(data.posts ?? [])][0]?.thumbnail;
+    if (!firstThumb || isMediaUrlExpired(proxyIgImage(firstThumb) || firstThumb)) {
+      data = await fetchInstagramData(username, "all", { pages: 30, force: true, background: true });
+    }
+    if (token !== activeCloneToken) return false;
+    if ((data.profile?.username || "").toLowerCase() !== username.toLowerCase()) return false;
+    const fresh = new Map<string, any>();
+    [...(data.reels ?? []), ...(data.posts ?? [])].forEach((m, i) => fresh.set(mediaIdentity(m, i), m));
+
+    const urlSwap = new Map<string, string>();
+    let changed = 0;
+    const next = reels.map((reel) => {
+      const m = reel.sourceId ? fresh.get(reel.sourceId) : undefined;
+      if (!m) return reel;
+      const copy: ExtendedPostItem = { ...reel, insights: { ...reel.insights } };
+      if (isMediaUrlExpired(reel.thumbnail) && m.thumbnail) {
+        const t = proxyIgImage(m.thumbnail) || m.thumbnail;
+        if (reel.thumbnail) urlSwap.set(reel.thumbnail, t);
+        copy.thumbnail = t;
+        changed++;
+      }
+      if (m.videoUrl && (isMediaUrlExpired(reel.videoUrl) || !reel.videoUrl)) {
+        if (reel.videoUrl) urlSwap.set(reel.videoUrl, m.videoUrl);
+        copy.videoUrl = m.videoUrl;
+        copy.videoFallbackUrl = proxyIgImage(m.videoUrl) || undefined;
+        changed++;
+      }
+      // Never let a missing count stay 0 when the fresh data has the real one.
+      const ins: any = copy.insights;
+      if (!(Number(ins.views) > 0) && Number(m.views) > 0) { ins.views = Number(m.views); if (!(Number(ins.accountsReached) > 0)) ins.accountsReached = Number(m.views); }
+      if (!(Number(ins.likes) > 0) && Number(m.likes) > 0) ins.likes = Number(m.likes);
+      if (!(Number(ins.comments) > 0) && Number(m.comments) > 0) ins.comments = Number(m.comments);
+      return copy;
+    });
+    if (!changed) return false;
+
+    // Grid tiles on Home/Profile were built from the same links.
+    Object.values(mockAccounts).forEach((acc) => {
+      if (acc.profile !== currentUser && acc.profile.username.toLowerCase() !== username.toLowerCase()) return;
+      acc.posts = acc.posts.map((p) => ({
+        ...p,
+        thumbnail: urlSwap.get(p.thumbnail) || p.thumbnail,
+        videoUrl: p.videoUrl ? urlSwap.get(p.videoUrl) || p.videoUrl : p.videoUrl,
+      }));
+    });
+    saveReelsData(next);
+    saveProfileOverrides();
+    try { window.dispatchEvent(new CustomEvent("reel-insights-updated", { detail: { reason: "media-refresh" } })); } catch {}
+    return true;
+  } catch {
+    // Try again later instead of every screen change.
+    return false;
+  } finally {
+    mediaRefreshRunning = false;
+  }
 }
 
 /**

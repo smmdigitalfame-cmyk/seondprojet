@@ -6,12 +6,43 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+// Live key server (the one the Telegram bot writes to). It is the source of
+// truth for keys, so every app URL (Lovable + Vercel) accepts the same keys.
+const PRIMARY_KEY_SERVER = "https://xkgjifugwislpbczoduy.supabase.co/functions/v1/";
+
+async function forwardToPrimary(name: string, raw: string): Promise<{ status: number; text: string } | null> {
+  if (Deno.env.get("SUPABASE_URL")?.includes("xkgjifugwislpbczoduy")) return null;
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 10000);
+    const res = await fetch(PRIMARY_KEY_SERVER + name, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: raw,
+      signal: ctrl.signal,
+    });
+    clearTimeout(t);
+    return { status: res.status, text: await res.text() };
+  } catch {
+    return null;
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return new Response("Method not allowed", { status: 405, headers: corsHeaders });
 
   try {
-    const body = await req.json().catch(() => ({}));
+    const raw = await req.text();
+    const primary = await forwardToPrimary("logout-device", raw);
+    if (primary && primary.status < 300) {
+      return new Response(primary.text, {
+        status: primary.status,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    let body: any = {};
+    try { body = JSON.parse(raw || "{}"); } catch {}
     const deviceFp = String(body.device_fp || "").trim();
     const key = String(body.key || "").trim().toUpperCase();
     if (!deviceFp || !key) {

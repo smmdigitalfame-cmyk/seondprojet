@@ -50,6 +50,9 @@ body {
     --ig-gradient: linear-gradient(45deg, hsl(45 100% 60%), hsl(340 90% 70%));
     --ig-blue: 204 93% 54%;
     --ig-like: 0 100% 50%;
+    --insights-summary: 210 13% 94%;
+    --insights-loading: 180 14% 97%;
+    --insights-loading-shine: 0 0% 100%;
     --sidebar-background: 0 0% 98%;
     --sidebar-foreground: 240 5.3% 26.1%;
     --sidebar-primary: 240 5.9% 10%;
@@ -80,6 +83,9 @@ body {
     --border: 215 21% 16%;
     --input: 215 21% 16%;
     --ring: 0 0% 83%;
+    --insights-summary: 240 3% 11%;
+    --insights-loading: 213 18% 14%;
+    --insights-loading-shine: 213 14% 20%;
     --sidebar-background: 240 5.9% 10%;
     --sidebar-foreground: 240 4.8% 95.9%;
     --sidebar-primary: 224.3 76.3% 48%;
@@ -199,6 +205,44 @@ body {
     background: linear-gradient(90deg, hsl(var(--secondary)) 25%, hsl(var(--muted)) 50%, hsl(var(--secondary)) 75%);
     background-size: 200% 100%;
     animation: shimmer 1.5s ease-in-out infinite;
+  }
+
+  .insights-summary-card {
+    background: hsl(var(--insights-summary));
+  }
+
+  .insights-loading-surface {
+    overflow: hidden;
+    background: hsl(var(--insights-loading));
+    animation: insights-loading-settle 1.4s ease-out both;
+  }
+
+  .insights-loading-surface::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent 0%, hsl(var(--insights-loading-shine) / 0.6) 50%, transparent 100%);
+    transform: translateX(-100%);
+    animation: insights-loading-sweep 1.25s linear infinite;
+  }
+
+  .insights-value-reveal {
+    transition: opacity 100ms ease-out;
+  }
+
+  @keyframes insights-loading-settle {
+    from { background-color: hsl(var(--insights-loading)); }
+    to { background-color: hsl(var(--insights-summary)); }
+  }
+
+  @keyframes insights-loading-sweep {
+    to { transform: translateX(100%); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .insights-loading-surface,
+    .insights-loading-surface::after { animation: none; }
+    .insights-value-reveal { transition: none; }
   }
 
   /* Instagram-style bounce for like */
