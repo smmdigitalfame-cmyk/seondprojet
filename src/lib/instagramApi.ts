@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getAuthSession, getDeviceFingerprint, clearAuthSession } from "@/lib/auth";
+import { instagramFailureMessage } from "@/lib/instagramFailure";
 
 export interface InstaProfile {
   username: string;
@@ -238,17 +239,13 @@ export async function fetchInstagramData(
           `[ig-scraper] ${u} ${type} FAIL ${res.status} ms=${ms} trace=${serverTrace} :: ${t.slice(0, 200)}`,
         );
         // Friendly, actionable message for end users.
-        let friendly = `Scraper ${res.status}: ${t.slice(0, 200)}`;
+        let friendly = instagramFailureMessage(res.status, t, u);
         if (res.status === 401) {
           friendly = definitiveKeyFailure
             ? "Session expired. Please log in again."
             : "License verification is temporarily unavailable. Please try again.";
         } else if (res.status === 429) {
           friendly = "Too many requests right now. Please wait a minute and try again.";
-        } else if (res.status === 404 || /not.?found/i.test(t)) {
-          friendly = `Account @${u} not found or is private.`;
-        } else if (res.status >= 500) {
-          friendly = "Instagram data provider is temporarily down. Please try again in a few seconds.";
         }
         const err = new Error(friendly) as Error & {
           __trace?: { traceId: string; serverTraceId: string; status: number; url: string };

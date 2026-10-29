@@ -1,4 +1,13 @@
 # Roadmap
+- [ ] Restore Whop clone after ZylaLabs trial exhaustion (provider HTTP 429 explicitly requires START YOUR PAID PLAN; owner action required)
+- [ ] Update ZylaLabs connection with the user's new key (connection form rejected the key; waiting for the "Show error" reason from the user)
+- [x] Preserve provider quota/access errors and show their remedy instead of timing out through failed fallback services
+- [x] Connect ZylaLabs API 12390; primary profile/posts/reels integration and nested pagination added; 7 tests pass, lowtappedd returns 6,772 followers and 12 videos with thumbnails (image HTTP 200); deployed to both backends
+- [ ] Verify full licensed clone through the UI (no active preview access session; provider reel continuation currently repeats the first four reels and omits view counts)
+- [x] Classify empty scraper results as provider unavailable instead of falsely missing/private; nine focused tests pass and managed function deployed
+- [ ] Restore complete lowtappedd video cloning (ZylaLabs now supplies real media; full completeness remains unverified because reel continuation repeated entries and no view counts were supplied)
+- [x] Restore failed Insights Content thumbnails using current reel media and video-frame fallback; five tests pass and phone-size broken-image fixture recovers (user's actual cloned account and live sites not verified)
+- [x] Match October 24 recording: light moving metric/Summary placeholders, simultaneous values, no card-height jump (phone-size presentation checked; actual licensed login not exercised)
 - [x] Restore missing logo/story photos and other CDN assets on existing Vercel app; all six asset URLs load and live home shows logo plus four actual story photos
 - [x] Fix missing followers/following for Whop and verify live clone plus refresh (207K public rounded followers, 107 following, 69 posts; exact-count paid provider remains quota-limited)
 - [x] Prepare manifest, Android icons and production-only service worker for PWABuilder

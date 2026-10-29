@@ -315,3 +315,22 @@ body {
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 }
+
+/* iOS "Add to Home Screen" only: keep content below the status bar / notch.
+   Class is set in main.tsx only for iOS standalone, so Android & browsers are untouched. */
+html.ios-standalone body {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+html.ios-standalone body::before {
+  content: "";
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: env(safe-area-inset-top, 0px);
+  background: hsl(var(--background));
+  z-index: 9999;
+  pointer-events: none;
+}
+html.ios-standalone .sticky.top-0 { top: env(safe-area-inset-top, 0px); }
+html.ios-standalone .fixed.top-0:not(.inset-0) { top: env(safe-area-inset-top, 0px); }
+html.ios-standalone .fixed.inset-0 { padding-top: env(safe-area-inset-top, 0px); }
+html.ios-standalone .fixed.bottom-0 { padding-bottom: env(safe-area-inset-bottom, 0px); }
