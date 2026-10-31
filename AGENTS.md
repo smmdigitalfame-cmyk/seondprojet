@@ -26,3 +26,5 @@
 - Store the connected account's avatar as a small data URL, because signed CDN avatar links expire and appear broken.
 - Keys imported from the previous backend are flagged `legacy`; the old backend stays the source of truth for their expiry, revocation and extra device slots (rechecked periodically), because their plan details were never copied over.
 - Detect signed media expiry (`exp`/`oe` stamps) on stored reels and in scraper cache payloads; refresh only media links by `sourceId` and never serve expired cached payloads, so cloned thumbnails do not turn into "No preview" hours later.
+- Backfill ZylaLabs items' missing views/likes/comments by shortcode from Instagram's public profile JSON (latest posts only), because ZylaLabs never reports view counts.
+- Fill missing cloned-reel views with a stable per-sourceId estimate (~10K, flagged `viewsEstimated`) that real scraped views or user edits replace, because some providers never report views.

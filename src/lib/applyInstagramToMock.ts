@@ -2,6 +2,7 @@ import { mockAccounts, currentUser, saveProfileOverrides, type PostItem } from "
 import { fetchInstagramData, proxyIgImage, setConnectedUsername, beginPriorityFetch, endPriorityFetch, type InstaScrapeResult } from "@/lib/instagramApi";
 import { saveReelsData, loadReelsData, type ExtendedPostItem } from "@/data/reelInsightsData";
 import { isMediaUrlExpired } from "@/lib/mediaExpiry";
+import { estimateViews } from "@/lib/estimatedViews";
 
 const MAX_REELS = 350;
 let activeCloneToken = 0;
@@ -189,9 +190,10 @@ function applyCloneData(data: InstaScrapeResult, cloneToken: number) {
   }));
 
   const reelItems: ExtendedPostItem[] = combined.map((m, index) => {
-    // Use ONLY real scraped values — no random fallback. If a field is missing
-    // from the scraper, keep it at 0 so the UI shows the truth.
-    const views = Math.max(0, Number(m.views) || 0);
+    // Real scraped views when present; otherwise an editable ~10K estimate.
+    const realViews = Math.max(0, Number(m.views) || 0);
+    const viewsEstimated = !(realViews > 0);
+    const views = viewsEstimated ? estimateViews(mediaIdentity(m, index), Number(m.likes) || 0) : realViews;
     const likes = Math.max(0, Number(m.likes) || 0);
     const comments = Math.max(0, Number(m.comments) || 0);
     const scrapedShares = Math.max(0, Number(m.shares) || 0);
@@ -207,6 +209,7 @@ function applyCloneData(data: InstaScrapeResult, cloneToken: number) {
       videoUrl: m.videoUrl || undefined,
       videoFallbackUrl: m.videoUrl ? (proxyIgImage(m.videoUrl) || undefined) : undefined,
       sourceUsername: p.username,
+      viewsEstimated,
       caption: m.caption || "",
       duration: m.duration ? String(m.duration) : undefined,
       musicTitle: m.code ? `Original audio · ${p.username}` : "",
@@ -390,7 +393,12 @@ export async function refreshExpiredReelMedia(): Promise<boolean> {
       }
       // Never let a missing count stay 0 when the fresh data has the real one.
       const ins: any = copy.insights;
-      if (!(Number(ins.views) > 0) && Number(m.views) > 0) { ins.views = Number(m.views); if (!(Number(ins.accountsReached) > 0)) ins.accountsReached = Number(m.views); }
+      if ((!(Number(ins.views) > 0) || copy.viewsEstimated) && Number(m.views) > 0) {
+        ins.views = Number(m.views);
+        if (!(Number(ins.accountsReached) > 0) || copy.viewsEstimated) ins.accountsReached = Number(m.views);
+        copy.viewsEstimated = false;
+        changed++;
+      }
       if (!(Number(ins.likes) > 0) && Number(m.likes) > 0) ins.likes = Number(m.likes);
       if (!(Number(ins.comments) > 0) && Number(m.comments) > 0) ins.comments = Number(m.comments);
       return copy;

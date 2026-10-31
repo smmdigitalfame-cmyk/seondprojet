@@ -1,6 +1,7 @@
 import { getPersistentJson, getPersistentScope, setPersistentJson } from "@/lib/persistentStorage";
 import { idbGetAll, idbSet } from "@/lib/idbBackup";
 import { applySavedOverridesToReels, getCurrentMainReelsAccountKey } from "@/lib/reelsDataStore";
+import { fillEstimatedViews } from "@/lib/estimatedViews";
 
 // Extended PostItem with full insights data
 export interface ReelInsights {
@@ -47,6 +48,8 @@ export interface ExtendedPostItem {
   engagementYCenter?: number;
   engagementYTop?: number;
   showGraph?: boolean;
+  /** True when views were estimated because the provider sent none. */
+  viewsEstimated?: boolean;
   insights: ReelInsights;
 }
 
@@ -198,11 +201,12 @@ export const loadReelsData = (): ExtendedPostItem[] => {
   } catch { }
   // Re-apply the user's saved edits by stable identity every time, so a fresh
   // clone, a refresh, or a list that could not be fully stored never loses them.
+  let out = base;
   try {
-    return applySavedOverridesToReels(base, getCurrentMainReelsAccountKey());
-  } catch {
-    return base;
-  }
+    out = applySavedOverridesToReels(base, getCurrentMainReelsAccountKey());
+  } catch { }
+  // Cloned reels without a view count get an editable ~10K estimate.
+  return out.map((r, i) => (r.sourceUsername ? fillEstimatedViews(r, i) : r));
 };
 
 export const saveReelsData = (reels: ExtendedPostItem[]): boolean => {

@@ -16,6 +16,9 @@
 // ---------------------------------------------------------------------------
 
 import { parseProfileHtml, profileCounts } from "./profileCounts.ts";
+import { unavailableResult } from "./resultStatus.ts";
+import { zylaPagination, zylaMedia } from "./zylaPagination.ts";
+import { ZylaProviderError, zylaFailure, preserveZylaFailure } from "./zylaError.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -1248,20 +1251,26 @@ async function wigScrape(username: string) {
 
 // ---- ZylaLabs Instagram Profile & Media Data API (PRIMARY) -----------------
 const ZYLA_KEY = Deno.env.get("ZYLALABS_API_KEY") ?? "";
-const ZYLA_BASE = "https://zylalabs.com/api/12390/instagram+profile+and+media+data+api";
+const ZYLA_CONNECTION_KEY = Deno.env.get("UDC_ZYLALABS_INSTAGRAM_MEDIA_API_KEY") ?? "";
+const ZYLA_GATEWAY_KEY = Deno.env.get("LOVABLE_API_KEY") ?? "";
+const ZYLA_BASE = `${ZYLA_CONNECTION_KEY ? "https://connector-gateway.lovable.dev/udc_zylalabs_instagram_media" : "https://zylalabs.com"}/api/12390/instagram+profile+and+media+data+api`;
 const ZYLA_PROFILE_EP = `${ZYLA_BASE}/23416/get+profile+details`;
 const ZYLA_POSTS_EP = `${ZYLA_BASE}/23417/get+profile+posts+list`;
+const ZYLA_REELS_EP = `${ZYLA_BASE}/23418/get+profile+reels+list`;
 const ZYLA_TIMEOUT_MS = 15_000;
 
 async function zylaGet(url: string): Promise<any> {
   const r = await fetch(url, {
-    headers: { Accept: "application/json", Authorization: `Bearer ${ZYLA_KEY}` },
+    headers: ZYLA_CONNECTION_KEY
+      ? { Accept: "application/json", Authorization: `Bearer ${ZYLA_GATEWAY_KEY}`, "X-Connection-Api-Key": ZYLA_CONNECTION_KEY }
+      : { Accept: "application/json", Authorization: `Bearer ${ZYLA_KEY}` },
     signal: AbortSignal.timeout(ZYLA_TIMEOUT_MS),
   });
   const text = await r.text();
   let j: any = null;
   try { j = JSON.parse(text); } catch { j = null; }
-  if (!r.ok || !j) throw new Error(`zyla_status=${r.status} body=${text.slice(0, 160)}`);
+  if (!r.ok || j?.success === false) throw zylaFailure(r.status, j);
+  if (!j) throw new Error(`zyla_status=${r.status}`);
   return j;
 }
 
@@ -1284,19 +1293,17 @@ function zylaProfile(d: any, username: string) {
   };
 }
 
-function zylaItem(p: any, idx: number) {
+function zylaItem(p: any, idx: number, reel = false) {
   const media = Array.isArray(p.mediaList) ? p.mediaList : [];
   const first = media[0] || {};
-  const isVideo = String(first.mediaType || "").toUpperCase() === "VIDEO" ||
-    !!p.isVideo || !!p.videoUrl;
-  const dl = firstString(first.downloadUrl, p.videoUrl);
+  const { isVideo, thumbnail, videoUrl } = zylaMedia(p, reel);
   const code = String(firstString(p.code, String(p.id ?? "")) || `zyla_post_${idx}`);
   return {
     id: String(firstString(String(p.id ?? ""), code)),
     code,
     caption: firstString(p.title, p.caption),
-    thumbnail: firstString(p.thumbnailUrl, first.thumbnailUrl, isVideo ? "" : dl, dl),
-    videoUrl: isVideo && !/\.m3u8/i.test(dl) ? dl : "",
+    thumbnail,
+    videoUrl,
     duration: Math.round(Number(p.duration || first.duration || 0)) || 0,
     views: firstNumber(p.statistics?.playCount, p.statistics?.viewCount, p.playCount),
     likes: firstNumber(p.statistics?.likeCount),
@@ -1311,34 +1318,49 @@ function zylaItem(p: any, idx: number) {
   };
 }
 
-async function zylaScrape(username: string, pages = 4) {
-  if (!ZYLA_KEY) return null;
-  const u = encodeURIComponent(username);
-  const profilePromise = zylaGet(`${ZYLA_PROFILE_EP}?username=${u}`).catch(() => null);
-
-  const raw: any[] = [];
-  let cursor = "";
+async function zylaPages(username: string, pages: number, reel: boolean, startCursor = "") {
+  const items: any[] = [];
+  let cursor = startCursor;
+  let hasMore = false;
+  const seen = new Set<string>();
   for (let i = 0; i < pages; i++) {
     try {
-      const url = `${ZYLA_POSTS_EP}?username=${u}${cursor ? `&nextCursor=${encodeURIComponent(cursor)}` : ""}`;
-      const page = await zylaGet(url);
-      const items = page?.data?.items;
-      if (!Array.isArray(items) || items.length === 0) break;
-      raw.push(...items);
-      cursor = firstString(page?.data?.nextCursor, page?.nextCursor);
-      if (!cursor) break;
+      const page = await zylaGet(`${reel ? ZYLA_REELS_EP : ZYLA_POSTS_EP}?username=${encodeURIComponent(username)}${cursor ? `&nextCursor=${encodeURIComponent(cursor)}` : ""}`);
+      const raw = page?.data?.items;
+      if (!Array.isArray(raw)) throw new Error("zyla_invalid_media_response");
+      items.push(...raw.map((p: any, idx: number) => zylaItem(p, items.length + idx, reel)));
+      const next = zylaPagination(page);
+      cursor = next.cursor;
+      hasMore = next.hasMore;
+      if (!raw.length || !hasMore || seen.has(cursor)) { hasMore = false; break; }
+      seen.add(cursor);
     } catch (e) {
-      console.warn(JSON.stringify({ event: "zyla_posts_failed", username, page: i, err: (e as Error).message }));
+      preserveZylaFailure(e);
+      if (!items.length) throw e;
+      console.warn(JSON.stringify({ event: "zyla_page_failed", username, page: i }));
       break;
     }
   }
+  return { items: dedupeByCode(items), cursor: hasMore ? cursor : "", hasMore };
+}
 
-  const profJson = await profilePromise;
+async function zylaScrape(username: string, pages = 4) {
+  if (!ZYLA_KEY && !ZYLA_CONNECTION_KEY) return null;
+  const [profJson, reels, posts] = await Promise.all([
+    zylaGet(`${ZYLA_PROFILE_EP}?username=${encodeURIComponent(username)}`).catch(preserveZylaFailure),
+    zylaPages(username, pages, true).catch(preserveZylaFailure),
+    zylaPages(username, pages, false).catch(preserveZylaFailure),
+  ]);
   const profile = zylaProfile(profJson?.data, username);
-  const items = dedupeByCode(raw.map((p, i) => zylaItem(p, i)));
-  console.log(JSON.stringify({ event: "zyla_counts", username, items: items.length, followers: profile?.followers }));
-  if (!profile && items.length === 0) return null;
-  return { profile, items };
+  const items = dedupeByCode([...(reels?.items || []), ...(posts?.items || [])]);
+  if (!items.length && (!profile || profile.postsCount > 0)) return null;
+  return { profile, items, reels, posts };
+}
+
+function zylaCursor(data: Awaited<ReturnType<typeof zylaScrape>>) {
+  if (!data) return "";
+  if (!data.reels?.hasMore && !data.posts?.hasMore) return "";
+  return `zyla:${encodeURIComponent(JSON.stringify({ reels: data.reels?.hasMore ? data.reels.cursor : "", posts: data.posts?.hasMore ? data.posts.cursor : "" }))}`;
 }
 
 
@@ -1500,7 +1522,75 @@ const withTimeout = <T,>(p: Promise<T>, ms: number, label: string): Promise<T> =
     new Promise<T>((_, rej) => setTimeout(() => rej(new Error(`${label}_timeout`)), ms)),
   ]);
 
+// ZylaLabs omits view counts. Instagram's public profile JSON reports real
+// views/likes/comments for the latest posts, so backfill those by shortcode.
+async function igPublicTimelineStats(username: string) {
+  const out = new Map<string, { views: number; likes: number; comments: number }>();
+  try {
+    const url = `https://www.instagram.com/api/v1/users/web_profile_info/?username=${encodeURIComponent(username)}`;
+    const agents = [
+      IG_HEADERS["User-Agent"],
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+      "Mozilla/5.0",
+    ];
+    let j: any = null;
+    for (const ua of agents) {
+      const r = await fetch(url, { headers: { ...IG_HEADERS, "User-Agent": ua }, signal: AbortSignal.timeout(6_000) }).catch(() => null);
+      if (r?.ok) { j = await r.json().catch(() => null); if (j?.data?.user) break; }
+      console.warn(JSON.stringify({ event: "ig_timeline_stats_non_ok", username, status: r?.status ?? 0 }));
+    }
+    if (!j) return out;
+    const u = j?.data?.user || {};
+    const edges = [
+      ...(u.edge_owner_to_timeline_media?.edges || []),
+      ...(u.edge_felix_video_timeline?.edges || []),
+    ];
+    for (const e of edges) {
+      const n = e?.node || {};
+      if (!n.shortcode) continue;
+      out.set(String(n.shortcode), {
+        views: firstNumber(n.video_view_count, n.video_play_count),
+        likes: firstNumber(n.edge_liked_by?.count, n.edge_media_preview_like?.count),
+        comments: firstNumber(n.edge_media_to_comment?.count),
+      });
+    }
+  } catch (e) {
+    console.warn(JSON.stringify({ event: "ig_timeline_stats_err", username, err: (e as Error).message }));
+  }
+  return out;
+}
+
+function applyTimelineStats(items: any[], stats: Map<string, { views: number; likes: number; comments: number }>) {
+  let filled = 0;
+  for (const it of items) {
+    const s = stats.get(String(it?.code));
+    if (!s) continue;
+    if (!Number(it.views) && s.views > 0) { it.views = s.views; filled++; }
+    if (!Number(it.likes) && s.likes > 0) { it.likes = s.likes; filled++; }
+    if (!Number(it.comments) && s.comments > 0) { it.comments = s.comments; filled++; }
+  }
+  return filled;
+}
+
 async function buildForUsername(username: string, pages = 4, lite = false) {
+  if (ZYLA_CONNECTION_KEY) {
+    const statsPromise = igPublicTimelineStats(username);
+    const data = await zylaScrape(username, lite ? 1 : pages).catch(preserveZylaFailure);
+    if (data?.profile && data.items.length) {
+      const stats = await statsPromise;
+      const filled = applyTimelineStats(data.items, stats);
+      console.log(JSON.stringify({ event: "zyla_stats_backfill", username, items: data.items.length, known: stats.size, filled }));
+      const cursor = zylaCursor(data);
+      return {
+        username, profile: data.profile,
+        reels: data.items.filter((item: any) => item.isVideo),
+        posts: data.items.filter((item: any) => !item.isVideo), highlights: [],
+        profileOk: true, reelsOk: true, postsOk: true, highlightsOk: true,
+        reelsHasMore: !!cursor, reelsNextCursor: cursor,
+        postsHasMore: false, postsNextCursor: "",
+      };
+    }
+  }
   const requestedItemCount = lite ? 24 : 350;
   if (!lite) paginationDeadline = Date.now() + PAGINATION_BUDGET_MS;
   // Start every real provider together. Keep a settled handler attached from
@@ -1642,7 +1732,7 @@ async function buildForUsername(username: string, pages = 4, lite = false) {
       return !s || (x.isVideo && !x.views && !s.views) || (!x.likes && !s.likes);
     });
     if (needsPublic && !lite) {
-      const pub = publicData || (pastDeadline() ? null : await instagramPublicScrape(username, 24)).catch(() => null);
+      const pub = publicData || (pastDeadline() ? null : await instagramPublicScrape(username, 24).catch(() => null));
       collect((pub?.items || []) as any[]);
     }
     let filled = 0;
@@ -1889,6 +1979,17 @@ Deno.serve(async (req) => {
   // ---- pagination request: only fetch the next reels page ----
   if (cursor) {
     try {
+      if (cursor.startsWith("zyla:")) {
+        const cursors = JSON.parse(decodeURIComponent(cursor.slice(5)));
+        if (typeof cursors.reels !== "string" || typeof cursors.posts !== "string") return json({ error: "invalid_cursor" }, 400);
+        const [reels, posts] = await Promise.all([
+          cursors.reels ? zylaPages(raw, 1, true, cursors.reels) : Promise.resolve(null),
+          cursors.posts ? zylaPages(raw, 1, false, cursors.posts) : Promise.resolve(null),
+        ]);
+        const next = zylaCursor({ profile: null, items: [], reels, posts });
+        const items = dedupeByCode([...(reels?.items || []), ...(posts?.items || [])]);
+        return json({ username: raw, reels: items.filter((item: any) => item.isVideo), posts: items.filter((item: any) => !item.isVideo), paginated: true, reelsNextCursor: next, reelsHasMore: !!next, postsNextCursor: "", postsHasMore: false }, 200, { "x-trace-id": traceId });
+      }
       const page = await clipsReelPages(raw, 1, cursor);
       return json(
         {
@@ -1905,6 +2006,7 @@ Deno.serve(async (req) => {
         { "x-trace-id": traceId, "x-cache": "MISS", "x-duration-ms": String(Date.now() - startedAt) },
       );
     } catch (e) {
+      if (e instanceof ZylaProviderError) return json({ error: "provider_request_failed", message: e.message }, e.status, { "x-trace-id": traceId });
       console.warn(JSON.stringify({ event: "paginate_failed", username: raw, err: (e as Error).message }));
       return json({ error: "pagination_failed" }, 502, { "x-trace-id": traceId });
     }
@@ -1982,14 +2084,16 @@ Deno.serve(async (req) => {
     const payload = await runBuild();
 
     if (!payload) {
+      const failure = unavailableResult(raw);
       return json(
-        { error: "not_found", message: `Account @${raw} not found or has no public data.` },
-        404,
+        failure.body,
+        failure.status,
         { "x-trace-id": traceId },
       );
     }
     return json(payload, 200, hdr("MISS"));
   } catch (e) {
+    if (e instanceof ZylaProviderError) return json({ error: "provider_request_failed", message: e.message }, e.status, { "x-trace-id": traceId });
     console.error(JSON.stringify({
       t: new Date().toISOString(), level: "error", trace: traceId,
       event: "scrape_failed", username: raw, err: (e as Error).message,

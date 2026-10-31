@@ -8,6 +8,33 @@ const corsHeaders = {
 
 const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
 
+// Bot-issued keys live on the primary key server; mirror the scraper's fallback.
+const PRIMARY_KEY_SERVER = "https://xkgjifugwislpbczoduy.supabase.co/functions/v1/";
+const PRIMARY_OK = new Map<string, number>();
+
+async function primaryKeyValid(key: string, fp: string): Promise<boolean> {
+  if ((Deno.env.get("SUPABASE_URL") || "").includes("xkgjifugwislpbczoduy")) return false;
+  const cacheKey = `${key}::${fp}`;
+  const okAt = PRIMARY_OK.get(cacheKey);
+  if (okAt && Date.now() - okAt < 5 * 60_000) return true;
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 8000);
+    const r = await fetch(PRIMARY_KEY_SERVER + "check-key-status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key, deviceFingerprint: fp }),
+      signal: ctrl.signal,
+    }).finally(() => clearTimeout(t));
+    const d = await r.json().catch(() => ({}));
+    if (r.ok && d?.valid !== false) {
+      PRIMARY_OK.set(cacheKey, Date.now());
+      return true;
+    }
+  } catch (_) { /* treat as invalid */ }
+  return false;
+}
+
 function safeFileName(name: string, contentType: string) {
   const decoded = decodeURIComponent(name || "upload").replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 80);
   if (decoded.includes(".")) return decoded;
@@ -44,7 +71,8 @@ Deno.serve(async (req) => {
       .maybeSingle();
     const fps: string[] = Array.isArray(ak?.device_fingerprints) ? ak!.device_fingerprints : [];
     const expired = ak?.expires_at ? new Date(ak.expires_at).getTime() <= Date.now() : false;
-    if (!ak || expired || !fps.includes(deviceFp)) {
+    const localOk = !!ak && !expired && fps.includes(deviceFp);
+    if (!localOk && !(await primaryKeyValid(key, deviceFp))) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
