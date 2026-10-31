@@ -2073,6 +2073,13 @@ Deno.serve(async (req) => {
     }
   }
 
+  // Quick (pages: 1) requests come only from automatic Home feed / story /
+  // avatar refreshes (including older installed app versions). They are served
+  // from cache only and never spend paid provider calls.
+  if (lite) {
+    return json({ error: "provider_unavailable", message: "cache_only" }, 503, hdr("CACHE-ONLY"));
+  }
+
   // ---- notify admins about live search (fire-and-forget) ----
   if (!lite) {
     broadcastSearchToAdmins(raw, traceId, {
