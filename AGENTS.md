@@ -22,7 +22,7 @@
 - Bundle the login tutorial with WebM first and MP4 fallback, so it plays reliably across desktop and mobile browsers.
 - Serve the downloadable 4K tutorial through Lovable Assets, so large media stays off the app bundle and downloads quickly.
 - Cache finished scraper payloads in the `ig_scrape_cache` table and serve them stale-while-revalidate, so app opens and repeat clones never wait on slow providers.
-- Requests with `pages: 1` use the scraper's quick mode (no slow enrichers, trimmed items); clones show the quick result first and replace it with the full list in the background.
+- Paid scraper calls happen only on a user search/clone (one request per search): `pages: 1` requests are cache-only, the Home feed never fetches, and there are no background, retry or app-open refreshes, because provider calls are billed.
 - Store the connected account's avatar as a small data URL, because signed CDN avatar links expire and appear broken.
 - Keys imported from the previous backend are flagged `legacy`; the old backend stays the source of truth for their expiry, revocation and extra device slots (rechecked periodically), because their plan details were never copied over.
 - Detect signed media expiry (`exp`/`oe` stamps) on stored reels and in scraper cache payloads; refresh only media links by `sourceId` and never serve expired cached payloads, so cloned thumbnails do not turn into "No preview" hours later.
