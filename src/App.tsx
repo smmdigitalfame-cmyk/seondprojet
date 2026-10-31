@@ -18,7 +18,6 @@ import MessagesScreen from "@/screens/MessagesScreen";
 import ReelsScreen from "@/screens/ReelsScreen";
 import ProfileScreen from "@/screens/ProfileScreen";
 import { loadProfileOverrides } from "@/data/mockData";
-import { refreshConnectedAvatar, refreshExpiredReelMedia } from "@/lib/applyInstagramToMock";
 const AnalyticsScreen = lazy(() => import("@/screens/AnalyticsScreen"));
 const ReelInsightsScreen = lazy(() => import("@/screens/ReelInsightsScreen"));
 const ReelDetailScreen = lazy(() => import("@/screens/ReelDetailScreen"));
@@ -84,10 +83,8 @@ const App = () => {
     });
     if (isAuthenticated()) {
       loadProfileOverrides();
-      // Fix expired profile photos from older copies, after first paint.
-      setTimeout(() => { void refreshConnectedAvatar(); }, 1500);
-      // Swap expired thumbnail/video links of the cloned reels for fresh ones.
-      setTimeout(() => { void refreshExpiredReelMedia(); }, 3000);
+      // No automatic scraper calls on app open: paid requests are only made
+      // when the user searches or clones a username.
       void revalidateStoredSession().then((valid) => {
         if (mounted && !valid) setAuthed(false);
       });
@@ -101,9 +98,7 @@ const App = () => {
 
   useEffect(() => {
     if (!authed) return;
-    const onVisible = () => {
-      if (document.visibilityState === "visible") void refreshExpiredReelMedia();
-    };
+    const onVisible = () => {};
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, [authed]);

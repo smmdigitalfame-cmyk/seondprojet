@@ -297,20 +297,16 @@ function scheduleRefresh() {
  * Stale-while-revalidate: returns cached data instantly (even if expired) and
  * refreshes in the background, pushing progressive updates to subscribers.
  */
-export function loadDiscover(force = false): Promise<DiscoverCache> {
-  if (!force) {
-    if (latest) {
-      if (Date.now() - latest.fetchedAt >= CACHE_TTL_MS) scheduleRefresh();
-      return Promise.resolve(latest);
-    }
-    const stored = readStoredCache();
-    if (stored) {
-      latest = stored.cache;
-      if (!stored.fresh) scheduleRefresh();
-      return Promise.resolve(stored.cache);
-    }
+export function loadDiscover(_force = false): Promise<DiscoverCache> {
+  // Paid scraper calls are only made when a user searches a username, so the
+  // Home feed never fetches on its own; it keeps showing what is stored.
+  if (latest) return Promise.resolve(latest);
+  const stored = readStoredCache();
+  if (stored) {
+    latest = stored.cache;
+    return Promise.resolve(stored.cache);
   }
-  return startRefresh();
+  return Promise.resolve({ fetchedAt: Date.now(), posts: [], reels: [] });
 }
 
 /** Shared hook body: instant cache + live progressive updates. */

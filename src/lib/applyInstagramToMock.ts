@@ -88,49 +88,13 @@ export async function cloneInstagramAccount(
   beginPriorityFetch();
 
   const fetchFull = async (): Promise<InstaScrapeResult> => {
-    let data = await fetchInstagramData(username, "all", { pages: 30, force: options.force });
-    // If the provider answered without view counts for most videos, ask once
-    // more for a fresh copy so the grid does not show 0 on every reel.
-    const videoItems = (data.reels ?? []).filter((m: any) => !!m.videoUrl);
-    const zeroViews = videoItems.filter((m: any) => !(Number(m.views) > 0)).length;
-    if (!options.force && videoItems.length >= 3 && zeroViews / videoItems.length > 0.5) {
-      try {
-        const retry = await fetchInstagramData(username, "all", { pages: 30, force: true });
-        const retryVideos = (retry.reels ?? []).filter((m: any) => !!m.videoUrl);
-        const retryZero = retryVideos.filter((m: any) => !(Number(m.views) > 0)).length;
-        if (retry.profile?.username && retryVideos.length && retryZero < zeroViews) data = retry;
-      } catch {}
-    }
+    const data = await fetchInstagramData(username, "all", { pages: 30, force: options.force });
     return data;
   };
 
-  const fullPromise = fetchFull();
-  fullPromise.finally(endPriorityFetch).catch(() => {});
-  const quickPromise = options.force
-    ? null
-    : fetchInstagramData(username, "all", { pages: 1 }).catch(() => null);
-
-  type Winner = { kind: "full"; data: InstaScrapeResult } | { kind: "quick"; data: InstaScrapeResult | null };
-  const first: Winner = quickPromise
-    ? await Promise.race([
-        fullPromise.then((data) => ({ kind: "full" as const, data })),
-        quickPromise.then((data) => ({ kind: "quick" as const, data })),
-      ])
-    : { kind: "full", data: await fullPromise };
-
-  if (first.kind === "quick" && first.data?.profile?.username && Number(first.data.profile.followers) > 0 && ((first.data.reels?.length || 0) + (first.data.posts?.length || 0) > 0 || !first.data.profile.postsCount)) {
-    applyCloneData(first.data, cloneToken);
-    // Full list continues in the background and replaces the quick preview.
-    fullPromise
-      .then((full) => {
-        if (cloneToken !== activeCloneToken || !full.profile?.username) return;
-        try { applyCloneData(full, cloneToken); } catch {}
-      })
-      .catch(() => {});
-    return first.data;
-  }
-
-  const full = first.kind === "full" ? first.data : await fullPromise;
+  // One search = one scraper request: no parallel quick request.
+  let full: InstaScrapeResult;
+  try { full = await fetchFull(); } finally { endPriorityFetch(); }
   applyCloneData(full, cloneToken);
   return full;
 }

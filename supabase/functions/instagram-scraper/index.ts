@@ -1615,7 +1615,8 @@ async function buildForUsername(username: string, pages = 4, lite = false) {
   ];
   // Start enrichers at the same time instead of waiting for Zyla and only then
   // starting Alpha. This removes a full provider timeout from failed clones.
-  const zylaPromise = lite ? Promise.resolve(null) : zylaScrape(username, 4).catch((e) => {
+  // Zyla already ran (and failed) above when its key exists; never pay twice.
+  const zylaPromise = lite || ZYLA_CONNECTION_KEY ? Promise.resolve(null) : zylaScrape(username, 4).catch((e) => {
     console.warn(JSON.stringify({ event: "zyla_build_failed", username, err: (e as Error).message }));
     return null;
   });
@@ -2056,7 +2057,8 @@ Deno.serve(async (req) => {
     // serving them showed "No preview" everywhere, so rebuild instead.
     if (db && Date.now() - db.at < DB_STALE_MS && !payloadMediaExpired(db.payload)) {
       const age = Date.now() - db.at;
-      if (age >= DB_FRESH_MS && !REFRESHING.has(myKey)) {
+      // No background rebuilds: every paid provider call must come from a user search.
+      if (false && age >= DB_FRESH_MS && !REFRESHING.has(myKey)) {
         REFRESHING.add(myKey);
         const task = runBuild().catch(() => null).finally(() => REFRESHING.delete(myKey));
         // @ts-ignore EdgeRuntime is a Supabase Deno global
