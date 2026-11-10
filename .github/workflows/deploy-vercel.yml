@@ -1,0 +1,36 @@
+name: Deploy Vercel
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: production-frontend
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+      VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+      VITE_SUPABASE_PROJECT_ID: ${{ vars.VITE_SUPABASE_PROJECT_ID }}
+      ASSET_PROXY_ORIGIN: ${{ vars.ASSET_PROXY_ORIGIN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: oven-sh/setup-bun@v2
+      - name: Validate hosting settings
+        run: |
+          for name in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID VITE_SUPABASE_URL VITE_SUPABASE_PUBLISHABLE_KEY VITE_SUPABASE_PROJECT_ID; do
+            test -n "${!name}" || { echo "Missing setting: $name"; exit 1; }
+          done
+      - run: bun install --frozen-lockfile
+      - run: bunx vitest run src/test/deploymentConfig.test.ts src/test/deploymentSettings.test.ts
+      - run: node scripts/prepare-hosting.mjs
+      - name: Deploy to configured Vercel project
+        run: bunx vercel@41.7.8 deploy --prod --yes --token "$VERCEL_TOKEN" --build-env VITE_SUPABASE_URL="$VITE_SUPABASE_URL" --build-env VITE_SUPABASE_PUBLISHABLE_KEY="$VITE_SUPABASE_PUBLISHABLE_KEY" --build-env VITE_SUPABASE_PROJECT_ID="$VITE_SUPABASE_PROJECT_ID"

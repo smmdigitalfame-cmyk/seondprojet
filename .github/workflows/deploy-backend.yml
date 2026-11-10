@@ -1,0 +1,59 @@
+name: Deploy backend
+on:
+  workflow_dispatch:
+    inputs:
+      register_webhooks:
+        description: Move Telegram webhooks to this backend (only one deployment can receive updates)
+        type: boolean
+        default: false
+      apply_payment_upgrades:
+        description: Apply payment security upgrades to an initialized database
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: production-backend
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+      PUBLIC_TELEGRAM_BOT_TOKEN: ${{ secrets.PUBLIC_TELEGRAM_BOT_TOKEN }}
+      PUBLIC_TELEGRAM_WEBHOOK_SECRET: ${{ secrets.PUBLIC_TELEGRAM_WEBHOOK_SECRET }}
+      OXAPAY_MERCHANT_API_KEY: ${{ secrets.OXAPAY_MERCHANT_API_KEY }}
+      PUBLIC_BOT_NOTIFICATION_CHAT_ID: ${{ vars.PUBLIC_BOT_NOTIFICATION_CHAT_ID }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_WEBHOOK_SECRET: ${{ secrets.TELEGRAM_WEBHOOK_SECRET }}
+      TELEGRAM_ADMIN_CHAT_ID_1: ${{ vars.TELEGRAM_ADMIN_CHAT_ID_1 }}
+      TELEGRAM_ADMIN_CHAT_ID_2: ${{ vars.TELEGRAM_ADMIN_CHAT_ID_2 }}
+      TELEGRAM_ADMIN_CHAT_ID_3: ${{ vars.TELEGRAM_ADMIN_CHAT_ID_3 }}
+      PAYMENT_PAGE_URL: ${{ vars.PAYMENT_PAGE_URL }}
+      OXAPAY_CALLBACK_URL: ${{ vars.OXAPAY_CALLBACK_URL }}
+      BOT_INTERNAL_SECRET: ${{ secrets.BOT_INTERNAL_SECRET }}
+      TIKTOK_KEY_ENDPOINT: ${{ vars.TIKTOK_KEY_ENDPOINT }}
+      ZYLALABS_API_KEY: ${{ secrets.ZYLALABS_API_KEY }}
+      RAPIDAPI_LOOTER_KEY: ${{ secrets.RAPIDAPI_LOOTER_KEY }}
+      RAPIDAPI_LOOTER_HOST: ${{ vars.RAPIDAPI_LOOTER_HOST }}
+      RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
+      RAPIDAPI_HOST: ${{ vars.RAPIDAPI_HOST }}
+      UDC_ZYLALABS_INSTAGRAM_MEDIA_API_KEY: ${{ secrets.UDC_ZYLALABS_INSTAGRAM_MEDIA_API_KEY }}
+      LOVABLE_API_KEY: ${{ secrets.LOVABLE_API_KEY }}
+      RAZORPAY_WEBHOOK_SECRET: ${{ secrets.RAZORPAY_WEBHOOK_SECRET }}
+      REGISTER_TELEGRAM_WEBHOOKS: ${{ inputs.register_webhooks }}
+      APPLY_PAYMENT_MIGRATIONS: ${{ inputs.apply_payment_upgrades }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: bunx vitest run src/test/publicPaymentSecurity.test.ts src/test/telegramSecurity.test.ts src/test/publicPaymentPlans.test.ts src/test/oxapaySignature.test.ts src/test/publicProducts.test.ts src/test/deploymentConfig.test.ts
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.121.0
+      - run: node scripts/deploy-backend.mjs
