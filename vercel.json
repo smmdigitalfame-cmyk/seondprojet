@@ -1,6 +1,6 @@
 {
   "framework": "vite",
-  "installCommand": "bun install --frozen-lockfile",
+  "installCommand": "rm -rf node_modules && bun install --frozen-lockfile",
   "buildCommand": "node scripts/prepare-hosting.mjs && bun run build",
   "outputDirectory": "dist",
   "headers": [
