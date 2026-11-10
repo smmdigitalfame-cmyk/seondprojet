@@ -1,88 +1,71 @@
-# InstaDash — Educational Instagram Analytics Clone
+# Insights Editor
 
-A learning-focused, mobile-first web application that recreates the look and feel of a social media analytics dashboard. Built as a **final-year cybersecurity student project** to study how modern full-stack applications handle authentication, data privacy, media handling, and secure client–server communication.
+Mobile-first insights editing app with key-based access, persistent reel/dashboard edits, a PWA and a Telegram purchase bot.
 
-> ⚠️ **Educational use only.** This project is not affiliated with, endorsed by, or connected to Instagram or Meta. It exists purely to demonstrate and learn full-stack development and application security concepts in a controlled environment.
+**Bot:** https://t.me/Insightseditorall_bot · **Website:** https://organicsmm.online
 
----
+Edited metrics are presentation data: they do not change real Instagram/TikTok views, engagement or earnings. This project is not affiliated with Instagram, Meta or TikTok.
 
-## 📚 Purpose & Learning Objectives
+## Deploy from GitHub
 
-This project was created to gain hands-on experience with:
+1. Import this repository into Vercel (or another static host).
+2. Set the three **public** connection settings listed below. Never put bot/payment tokens in `VITE_*` settings.
+3. Reuse the existing external backend, or restore its complete database and storage into your own backend first.
+4. Configure the GitHub `production` environment with the credentials in [DEPLOYMENT.md](DEPLOYMENT.md).
+5. Run **Actions → Deploy backend**. It securely transfers runtime settings, deploys an explicit function list, and checks that unsigned payment/bot requests are rejected.
+6. Optionally approve webhook registration to move the bots to the new backend. Existing invoices and old access keys require migration planning; do not delete the old backend.
 
-- **Application security fundamentals** — session handling, access keys, device fingerprinting, and abuse-resistant authentication flows.
-- **Data protection** — row-level security (RLS) policies, least-privilege database grants, and safe client-side storage practices (quota management, cache eviction, preventing data leaks between users).
-- **Secure media handling** — proxying third-party media, caching strategies, and avoiding direct exposure of user data.
-- **Web performance engineering** — progressive loading, stale-while-revalidate caching, skeleton states, and service-worker-based PWA behaviour.
-- **Threat modelling** — understanding how clone-style apps can be abused (unauthorized scraping, session hijacking) and how to defend against them.
+**Important:** GitHub contains source, not customer data, storage files or private credentials. A new empty database cannot be created from the current incremental migration history alone. The deployment job stops if the base database has not been restored. Vercel alone hosts the frontend; it does not run the Telegram/payment functions.
 
----
+### Frontend settings
 
-## ✨ What the App Does
+| Setting | Value source |
+|---|---|
+| `VITE_SUPABASE_URL` | Your external backend API URL |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | The backend's public/publishable key, never its privileged key |
+| `VITE_SUPABASE_PROJECT_ID` | The same backend's project reference |
 
-- **Analytics dashboard** — views, reach, engagement, follower growth, and audience demographics presented with interactive, editable charts.
-- **Reel-level insights** — per-video metrics (views, likes, comments, shares, saves) with retention and watch-time graphs.
-- **Profile & feed simulation** — media grid, stories, and detail views that mirror a real social app experience.
-- **Offline-capable PWA** — installable, with local caching for fast repeat sessions.
-- **Access-key based login** — a simple key + device-fingerprint system used to study session lifecycle, expiry, and revocation.
+Vercel: framework **Vite**, install `bun install --frozen-lockfile`, output **dist**, build `node scripts/prepare-hosting.mjs && bun run build`. The preparation command updates only callback/asset routing in the deployment checkout. Keep the SPA fallback and asset proxy before it.
 
----
+For Netlify, Cloudflare Pages or another static host, use the same install/build/output settings but configure their own SPA and asset-proxy rules. The backend remains on its supported edge-function platform.
 
-## 🛠️ Tech Stack
+## Local development
 
-| Layer      | Technology |
-|------------|------------|
-| Frontend   | React 18, TypeScript, Vite, Tailwind CSS, shadcn/ui |
-| Charts     | Recharts |
-| Animation  | Framer Motion |
-| Backend    | Lovable Cloud (Supabase: Postgres, Auth, Edge Functions, Storage) |
-| PWA        | Service worker + web app manifest |
-| Testing    | Vitest, Playwright |
-
----
-
-## 🔐 Security Concepts Demonstrated
-
-- **Row-Level Security (RLS)** on every table, with explicit grants instead of broad public access.
-- **Roles stored in a dedicated table** (never on the profile table) with a `SECURITY DEFINER` role-check function to avoid recursive policy issues.
-- **Device fingerprint + access key** pairing to study session binding, expiry windows, and remote logout.
-- **Edge functions** for privileged operations (key validation, logging, webhook handling) so secrets never reach the browser.
-- **Client storage hygiene** — compacting and pruning cached data to prevent quota exhaustion and stale-data bugs.
-
----
-
-## 🚀 Getting Started
-
-```bash
-npm install
-npm run dev
+```sh
+bun install --frozen-lockfile
+bun run dev
+bun run test
 ```
 
-The app runs at `http://localhost:8080`. A valid access key is required to sign in (managed via the backend).
+Use `.env.local` for **public frontend settings only**; keep it out of Git. Never edit generated backend client files to switch production settings. Local server: `http://localhost:8080`.
 
----
+## Purchase security
 
-## 📁 Project Structure (high level)
+- Instagram/TikTok product selection precedes plan selection.
+- Plans: 1 day $1, 7 days $5, 30 days $10, lifetime $25.
+- OxaPay callbacks authenticate the exact raw bytes with HMAC-SHA512.
+- Server-side provider recheck requires a paid invoice with matching order ID, track, currency, amount and plan duration.
+- Atomic database fulfillment, verification stamps and immutable order terms protect purchased-key issuance; public roles cannot run mint functions.
+- Admin commands require authenticated Telegram webhooks and allowlisted private-chat senders. Admin issuance is separate from purchased access.
+- TikTok keys are issued by a separate service; its independent payment enforcement needs review in that repository.
 
-```
-src/
-├── components/   # Reusable UI components (cards, editors, modals)
-├── screens/      # Main app screens (Home, Reels, Insights, Profile…)
-├── lib/          # Storage, auth, media, and formatting utilities
-├── integrations/ # Backend client (auto-generated)
-└── data/         # Demo/seed data for the learning environment
-supabase/
-└── functions/    # Serverless functions (auth, logging, webhooks)
-```
+## Repository layout
 
----
+| Path | Purpose |
+|---|---|
+| `src/` | App, editors and focused tests |
+| `supabase/functions/` | Backend function source and shared payment helpers |
+| `drizzle/migrations/` | Incremental schema history (not a complete empty-database baseline) |
+| `scripts/` | Secret-safe backend deployment and frontend route preparation |
+| `.github/workflows/` | Manually approved deployment automation |
+| `DEPLOYMENT.md` | Settings inventory, relocation steps, safety checks and rollback |
+| `EXTERNAL_DEPLOYMENT.md` | Existing production deployment history |
+| `PWABUILDER_SETUP.md` | Android/PWA packaging and signing guidance |
 
-## 🎓 Author
+## Before sharing the repository
 
-Built by a **final-year Cybersecurity student** as a capstone-style learning project — combining full-stack development practice with an applied study of secure application design.
+Keep the repository private if it contains operational configuration. Check GitHub's tracked files: do not upload `.env`, `.env.local`, private keys, keystores, customer database exports or provider tokens. Public publishable keys may be present; privileged credentials must not be. The platform owns `.gitignore`, so review ignore rules through your repository settings/local checkout rather than assuming they protect every environment file.
 
----
+## Verification limits
 
-## 📄 Disclaimer
-
-All trademarks, logos, and brand names belong to their respective owners. This project uses them solely for educational, non-commercial demonstration purposes. Do not use this code to access, scrape, or redistribute data from any service without proper authorization.
+Focused payment and deployment tests are included. A fresh-host deployment, real paid checkout, installed-phone login and independent TikTok key-server audit are not proven by a successful workflow alone. Follow the checklist in the deployment guide before routing customers to a new host.

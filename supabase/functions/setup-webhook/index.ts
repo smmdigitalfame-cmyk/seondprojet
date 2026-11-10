@@ -1,7 +1,5 @@
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-admin-token",
-};
+import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
+import { adminWebhookSecret } from '../_shared/telegram-security.ts';
 
 function timingSafeEqual(a: string, b: string) {
   if (a.length !== b.length) return false;
@@ -15,8 +13,10 @@ Deno.serve(async (req) => {
     return new Response("ok", { headers: corsHeaders });
   }
 
-  const expected = (Deno.env.get("TELEGRAM_ADMIN_CHAT_ID_1") || "").trim();
-  const provided = (req.headers.get("x-admin-token") || new URL(req.url).searchParams.get("token") || "").trim();
+  const botToken = Deno.env.get('TELEGRAM_BOT_TOKEN') ?? '';
+  const webhookSecret = await adminWebhookSecret(botToken, Deno.env.get('TELEGRAM_WEBHOOK_SECRET'));
+  const expected = Deno.env.get('TELEGRAM_SETUP_SECRET') ?? webhookSecret;
+  const provided = (req.headers.get("x-admin-token") || "").trim();
   if (!expected || !provided || !timingSafeEqual(provided, expected)) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401,
@@ -25,8 +25,8 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const botToken = Deno.env.get("TELEGRAM_BOT_TOKEN")!;
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    if (!botToken || !supabaseUrl) throw new Error('Webhook configuration missing');
     const webhookUrl = `${supabaseUrl}/functions/v1/telegram-webhook`;
 
     const res = await fetch(
@@ -34,7 +34,7 @@ Deno.serve(async (req) => {
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: webhookUrl }),
+        body: JSON.stringify({ url: webhookUrl, secret_token: webhookSecret }),
       }
     );
 

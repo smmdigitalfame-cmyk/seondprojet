@@ -1,9 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
+import { adminWebhookSecret, secureTelegramSecret } from '../_shared/telegram-security.ts';
 
 function generateKey(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -62,7 +59,10 @@ Deno.serve(async (req) => {
     return new Response("ok", { headers: corsHeaders });
   }
 
-  const botToken = Deno.env.get("TELEGRAM_BOT_TOKEN")!;
+  if (req.method !== 'POST') return new Response('POST required', { status: 405, headers: corsHeaders });
+  const botToken = Deno.env.get("TELEGRAM_BOT_TOKEN") ?? '';
+  const expectedSecret = await adminWebhookSecret(botToken, Deno.env.get('TELEGRAM_WEBHOOK_SECRET'));
+  if (!secureTelegramSecret(req.headers.get('X-Telegram-Bot-Api-Secret-Token'), expectedSecret)) return new Response('Unauthorized', { status: 401, headers: corsHeaders });
   const adminChatIds = getAdminChatIds();
 
   try {
@@ -73,19 +73,20 @@ Deno.serve(async (req) => {
 
     const update = await req.json();
     const message = update?.message;
-    if (!message?.text) {
+    if (!Number.isSafeInteger(update.update_id) || !message?.text || message.chat?.type !== 'private' || message.from?.id !== message.chat?.id) {
       return new Response("ok", { status: 200 });
     }
 
     const chatId = message.chat.id;
     const text = message.text.trim();
 
-    console.log("Chat ID:", chatId, "Admin IDs:", adminChatIds, "Text:", text);
+    // Do not log key-bearing commands or personal Telegram content.
 
     // ============== PUBLIC COMMANDS (any user) ==============
     // /start or /buy → send payment page link
     if (text === "/start" || text.startsWith("/buy") || text.startsWith("/pay")) {
-      const payUrl = `https://repo-clone-buddy-16.lovable.app/pay?chat_id=${chatId}`;
+      const payUrl = new URL(Deno.env.get('PAYMENT_PAGE_URL') || 'https://repo-clone-buddy-16.lovable.app/pay');
+      payUrl.searchParams.set('chat_id', String(chatId));
       await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -253,6 +254,48 @@ Deno.serve(async (req) => {
           text: "⛔ Ye admin command hai.\n\nKey lene ke liye /buy bhejo.",
         }),
       });
+      return new Response("ok", { status: 200 });
+    }
+
+    // /broadcast <message> → send to every user who started the public bot
+    if (text.startsWith("/broadcast") || text.startsWith("/bc")) {
+      const body = text.replace(/^\/(broadcast|bc)(@\w+)?/, "").trim();
+      const publicToken = Deno.env.get("PUBLIC_TELEGRAM_BOT_TOKEN") ?? "";
+      if (!body) {
+        await sendToAllAdmins(botToken, adminChatIds, "📢 <b>Usage:</b>\n<code>/broadcast Your message here</code>\n\nYe message @Insightseditorall_bot ke sabhi users ko jayega.");
+        return new Response("ok", { status: 200 });
+      }
+      if (!publicToken) {
+        await sendToAllAdmins(botToken, adminChatIds, "❌ Public bot token configured nahi hai.");
+        return new Response("ok", { status: 200 });
+      }
+      const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const job = (async () => {
+        const ids: string[] = [];
+        for (let from = 0; ; from += 1000) {
+          const { data, error } = await db.from("public_bot_users").select("telegram_chat_id").range(from, from + 999);
+          if (error) { await sendToAllAdmins(botToken, adminChatIds, `❌ Users load nahi hue: ${error.message}`); return; }
+          ids.push(...(data ?? []).map((r: { telegram_chat_id: number | string }) => String(r.telegram_chat_id)));
+          if (!data || data.length < 1000) break;
+        }
+        await sendToAllAdmins(botToken, adminChatIds, `📢 Broadcast shuru: <b>${ids.length}</b> users`);
+        let ok = 0, failed = 0;
+        for (let i = 0; i < ids.length; i += 25) {
+          const results = await Promise.allSettled(ids.slice(i, i + 25).map((id) =>
+            fetch(`https://api.telegram.org/bot${publicToken}/sendMessage`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ chat_id: id, text: body, disable_web_page_preview: false }),
+            }).then((r) => r.ok)
+          ));
+          for (const r of results) r.status === "fulfilled" && r.value ? ok++ : failed++;
+          await new Promise((r) => setTimeout(r, 1100)); // stay under Telegram's ~30 msg/sec limit
+        }
+        await sendToAllAdmins(botToken, adminChatIds, `✅ <b>Broadcast complete</b>\n\n📨 Sent: <b>${ok}</b>\n🚫 Failed/blocked: <b>${failed}</b>`);
+      })();
+      // deno-lint-ignore no-explicit-any
+      const rt = (globalThis as any).EdgeRuntime;
+      if (rt?.waitUntil) rt.waitUntil(job); else await job;
       return new Response("ok", { status: 200 });
     }
 
@@ -615,6 +658,7 @@ Deno.serve(async (req) => {
         `━━━━━━━━━━━━━━━━━━━━\n\n` +
         `<b>📌 Commands:</b>\n\n` +
         `🔑 <code>/gen name days [devices]</code>\n   Generate a new key\n\n` +
+        `📢 <code>/broadcast message</code>\n   Send message to all public bot users\n\n` +
         `📋 <code>/list</code>\n   List all keys (active + revoked)\n\n` +
         `🚫 <code>/revoke KEY-CODE</code>\n   Deactivate a key\n\n` +
         `🔁 <code>/setapi NEW_RAPIDAPI_KEY</code>\n   Replace RapidAPI key (zero downtime)\n\n` +

@@ -740,34 +740,32 @@ const ProfileScreen = () => {
       </AnimatePresence>
 
       {/* Header */}
-      <div className="fixed top-0 left-0 right-0 z-50 mx-auto max-w-lg bg-background">
-        <header className="grid grid-cols-[40px_1fr_auto] items-center bg-background px-4 py-4 ">
-          <button className="text-foreground justify-self-start relative">
+      <div className="sticky top-0 z-40 w-full bg-background">
+        <header className="app-topbar grid min-h-16 grid-cols-[44px_minmax(0,1fr)_88px] items-center bg-background">
+          <Button variant="ghost" size="icon" aria-label="Create" className="h-11 w-11 text-foreground justify-self-start relative [&_svg]:size-7">
             <Plus size={28} strokeWidth={1.5} />
-            <div className="absolute top-[4px] right-[5px] h-[6px] w-[6px] rounded-full bg-[hsl(var(--ig-like))]" />
-          </button>
-          <button onClick={() => setSearchOpen(true)} className="flex items-center gap-1.5 justify-self-center">
-            <span className="text-[16px] font-medium text-foreground">{profile.username}</span>
-            {profile.isVerified && <VerifiedBadge size={16} className="text-[hsl(var(--ig-blue))]" />}
-            <ChevronDown size={16} className="text-foreground" />
-            <div className="h-[7px] w-[7px] rounded-full bg-[hsl(0,100%,50%)] ml-0.5" />
-          </button>
-          <div className="flex items-center gap-5">
-            <button className="text-foreground">
+            <div className="absolute top-2 right-2 h-[6px] w-[6px] rounded-full bg-[hsl(var(--ig-like))]" />
+          </Button>
+          <Button variant="ghost" onClick={() => setSearchOpen(true)} aria-label={`Switch account: ${profile.username}`} title={profile.username} className="h-auto min-h-11 min-w-0 max-w-full px-1 py-2 gap-1 justify-self-center whitespace-normal [&_svg]:size-4">
+            <span className="min-w-0 break-all text-[16px] font-medium text-foreground leading-tight">{profile.username}</span>
+            {profile.isVerified && <VerifiedBadge size={16} className="shrink-0 text-[hsl(var(--ig-blue))]" />}
+            <ChevronDown size={16} className="shrink-0 text-foreground" />
+            <div className="h-[7px] w-[7px] shrink-0 rounded-full bg-[hsl(var(--ig-like))]" />
+          </Button>
+          <div className="flex items-center">
+            <Button variant="ghost" size="icon" aria-label="Threads" className="h-11 w-11 text-foreground">
               <img src={threadsLogo} alt="Threads" className="w-[26px] h-[26px] dark:invert" />
-            </button>
-            <button className="text-foreground" onClick={() => setSettingsOpen(true)}>
+            </Button>
+            <Button variant="ghost" size="icon" aria-label="Settings and activity" className="h-11 w-11 text-foreground [&_svg]:size-7" onClick={() => setSettingsOpen(true)}>
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                 <line x1="3" y1="6" x2="21" y2="6" />
                 <line x1="3" y1="12" x2="21" y2="12" />
                 <line x1="3" y1="18" x2="21" y2="18" />
               </svg>
-            </button>
+            </Button>
           </div>
         </header>
       </div>
-      {/* Spacer for fixed header */}
-      <div className="h-[48px]" />
 
       {/* Pull-to-refresh spinner — sits between header and profile, pushes name/avatar down */}
       <div
@@ -783,7 +781,7 @@ const ProfileScreen = () => {
 
       {/* Profile Info */}
       <div className="px-4 pt-0 overflow-visible">
-        <div className="flex items-center gap-5 overflow-visible">
+        <div className="flex items-center gap-3 min-[375px]:gap-5 overflow-visible">
           <div className="relative flex-shrink-0 flex flex-col items-center mt-10">
             {/* Notes bubble overlapping avatar */}
             {account.storyNote && (
@@ -814,17 +812,17 @@ const ProfileScreen = () => {
             </div>
           </div>
 
-          <div className="flex-1 pt-1">
-            <p className="text-[15px] font-semibold text-foreground mb-1.5">{profile.fullName}</p>
-            <div className="flex w-full">
+          <div className="min-w-0 flex-1 pt-1">
+            <p className="break-words text-[15px] font-semibold text-foreground mb-1.5">{profile.fullName}</p>
+            <div className="grid w-full grid-cols-3 gap-1">
               {[
                 { label: "posts", value: account.postsDisplay || String(isJust4abhii ? reelsData.length : account.posts?.length || profile.posts) },
                 { label: "followers", value: account.followersDisplay || String(profile.followers) },
                 { label: "following", value: account.followingDisplay || String(profile.following) },
-              ].map((s, i) => (
-                <button key={s.label} className={`flex flex-col items-center ${i === 0 ? 'pr-5' : 'flex-1'}`}>
-                  <p className="text-[16px] font-medium text-foreground leading-tight">{s.value}</p>
-                  <p className="text-[13px] text-foreground">{s.label}</p>
+              ].map((s) => (
+                <button key={s.label} className="min-w-0 flex flex-col items-center">
+                  <p className="max-w-full break-all text-[16px] font-medium text-foreground leading-tight">{s.value}</p>
+                  <p className="max-w-full break-all text-[13px] text-foreground">{s.label}</p>
                 </button>
               ))}
             </div>
@@ -833,14 +831,14 @@ const ProfileScreen = () => {
 
         <div className="mt-0.5">
           {account.category && <p className="text-[12px] text-muted-foreground leading-tight">{account.category}</p>}
-          <p className="text-[12px] text-foreground leading-[15px] whitespace-pre-line">{profile.bio.replace(`${account.category}\n`, '')}</p>
+          <p className="break-words text-[12px] text-foreground leading-[15px] whitespace-pre-line">{profile.bio.replace(`${account.category}\n`, '')}</p>
           {profile.website && (
             <div className="mt-0 flex items-center gap-1">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="hsl(225 73% 57%)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg className="shrink-0 text-[hsl(var(--ig-blue))]" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
                 <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
               </svg>
-              <span className="text-[12px] text-[hsl(225,73%,57%)] font-medium">{profile.website}</span>
+              <span className="min-w-0 break-all text-[12px] text-[hsl(var(--ig-blue))] font-medium">{profile.website}</span>
             </div>
           )}
         </div>

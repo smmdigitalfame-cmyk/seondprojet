@@ -20,6 +20,7 @@ const PINNED_STORY_AVATARS: Record<string, string> = {
 };
 import { sendTelegramAlert } from "@/lib/auth";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import StoryCircle from "@/components/StoryCircle";
 import StoryViewer from "@/components/StoryViewer";
 import PostCard from "@/components/PostCard";
@@ -326,10 +327,10 @@ const HomeScreen = () => {
       onTouchCancel={onTouchEnd}
     >
       {/* Header */}
-      <header className="sticky top-0 z-40 grid h-[64px] grid-cols-[40px_1fr_40px] items-center bg-background px-4 border-none shadow-none">
-        <button
+      <header className="app-topbar sticky top-0 z-40 grid min-h-16 grid-cols-[44px_minmax(0,1fr)_44px] items-center bg-background border-none shadow-none">
+        <Button variant="ghost" size="icon" aria-label="Create"
           onClick={() => navigate("/create")}
-          className="text-foreground active:scale-90 transition-transform"
+          className="h-11 w-11 text-foreground active:scale-90 transition-transform [&_svg]:size-[30px]"
         >
           <svg
             width="30"
@@ -344,19 +345,19 @@ const HomeScreen = () => {
             <line x1="12" y1="5" x2="12" y2="19" />
             <line x1="5" y1="12" x2="19" y2="12" />
           </svg>
-        </button>
-        <button
+        </Button>
+        <Button variant="ghost"
           onClick={() => setConnectOpen(true)}
-          className="justify-self-center active:scale-95 transition-transform"
+          className="h-11 min-w-0 max-w-full px-2 justify-self-center active:scale-95 transition-transform [&_img]:max-w-full [&_img]:object-contain"
           aria-label="Connect Instagram account"
         >
           <InstagramLogo />
-        </button>
+        </Button>
         <div className="flex items-center justify-self-end">
-          <button className="relative text-foreground active:scale-90 transition-transform">
+          <Button variant="ghost" size="icon" aria-label="Notifications" className="h-11 w-11 relative text-foreground active:scale-90 transition-transform [&_svg]:size-[30px]">
             <Heart size={30} strokeWidth={1.5} />
-            <span className="absolute -right-0.5 -top-0.5 h-[8px] w-[8px] rounded-full bg-[hsl(var(--ig-like))]" />
-          </button>
+            <span className="absolute right-1 top-1 h-[8px] w-[8px] rounded-full bg-[hsl(var(--ig-like))]" />
+          </Button>
         </div>
       </header>
 

@@ -561,3 +561,25 @@ export const aggregateInsights = (d?: InstaScrapeResult | null): AggregateInsigh
     postsCount: d?.profile?.postsCount ?? 0,
   };
 };
+
+/** Home feed: accounts other users already cloned, served from the backend cache (no paid provider calls). */
+export async function fetchDiscoverAccounts(): Promise<any[]> {
+  const session = getAuthSession();
+  if (!session?.key) return [];
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    apikey: SUPABASE_KEY,
+    "x-access-key": session.key,
+    "x-device-fp": session.deviceFingerprint || getDeviceFingerprint(),
+  };
+  if (!SUPABASE_KEY.startsWith("sb_publishable_")) headers.Authorization = `Bearer ${SUPABASE_KEY}`;
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/instagram-scraper`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ discover: true }),
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!res.ok) return [];
+  const j = await res.json().catch(() => null);
+  return Array.isArray(j?.accounts) ? j.accounts : [];
+}

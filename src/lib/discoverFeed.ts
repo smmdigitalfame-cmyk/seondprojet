@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { fetchInstagramData, proxyIgImage } from "@/lib/instagramApi";
+import { fetchDiscoverAccounts, proxyIgImage } from "@/lib/instagramApi";
 
 export const DISCOVER_USERNAMES = [
   "selenagomez",
@@ -27,7 +27,7 @@ export const DISCOVER_USERNAMES = [
 // Cached records contain short-lived signed CDN URLs. Keeping this cache for a
 // year made story/profile images permanently broken after the signatures
 // expired. The version bump immediately drops those stale records on devices.
-const CACHE_KEY = "discover_feed_v6_celebs";
+const CACHE_KEY = "discover_feed_v7_cloned";
 const CACHE_TTL_MS = 30 * 60 * 1000;
 
 export interface DiscoverProfile {
@@ -184,48 +184,16 @@ function extractAccount(
 }
 
 async function fetchDiscoverData(
-  onPartial?: (snapshot: DiscoverCache) => void,
+  _onPartial?: (snapshot: DiscoverCache) => void,
 ): Promise<DiscoverCache> {
   const posts: DiscoverPost[] = [];
   const reels: DiscoverReel[] = [];
-  // Emitting on every finished account re-shuffled and re-rendered the whole
-  // feed 20+ times, which is what made scrolling stutter while data loaded.
-  // Throttle snapshots so the UI updates smoothly instead.
-  let lastEmit = 0;
-  let emitted = false;
-  const pushSnapshot = (final = false) => {
-    const now = Date.now();
-    if (!final && emitted && now - lastEmit < 1500) return;
-    lastEmit = now;
-    emitted = true;
-    onPartial?.({ fetchedAt: now, posts: [...posts], reels: [...reels] });
-  };
-
-  const scrape = async (u: string, i: number) => {
-    try {
-      const d = await fetchInstagramData(u, "all", {
-        pages: 1,
-        background: true,
-      });
-      const part = extractAccount(d, i);
-      if (!part.posts.length && !part.reels.length) return;
-      posts.push(...part.posts);
-      reels.push(...part.reels);
-      // First account lands immediately; later ones are batched.
-      pushSnapshot(!emitted);
-    } catch (e: any) {
-      console.warn("[discover] fail", u, e?.message);
-    }
-  };
-
-  // Two waves: the first few accounts fill the story bar + first screen of
-  // posts quickly, the rest trickle in slowly so a user-initiated clone always
-  // has free sockets (that was the main cause of slow account cloning).
-  const HEAD = 6;
-  await mapLimit(DISCOVER_USERNAMES.slice(0, HEAD), 6, (u, i) => scrape(u, i));
-  pushSnapshot(true);
-  await mapLimit(DISCOVER_USERNAMES.slice(HEAD), 3, (u, i) => scrape(u, i + HEAD));
-
+  const accounts = await fetchDiscoverAccounts().catch(() => []);
+  accounts.forEach((d, i) => {
+    const part = extractAccount(d, i);
+    posts.push(...part.posts);
+    reels.push(...part.reels);
+  });
   return { fetchedAt: Date.now(), posts, reels };
 }
 
@@ -300,13 +268,15 @@ function scheduleRefresh() {
 export function loadDiscover(_force = false): Promise<DiscoverCache> {
   // Paid scraper calls are only made when a user searches a username, so the
   // Home feed never fetches on its own; it keeps showing what is stored.
-  if (latest) return Promise.resolve(latest);
+  // It mixes accounts other users already cloned (read from the backend cache).
+  if (latest && !_force) return Promise.resolve(latest);
   const stored = readStoredCache();
   if (stored) {
     latest = stored.cache;
+    if (!stored.fresh || !stored.cache.posts.length) scheduleRefresh();
     return Promise.resolve(stored.cache);
   }
-  return Promise.resolve({ fetchedAt: Date.now(), posts: [], reels: [] });
+  return startRefresh();
 }
 
 /** Shared hook body: instant cache + live progressive updates. */

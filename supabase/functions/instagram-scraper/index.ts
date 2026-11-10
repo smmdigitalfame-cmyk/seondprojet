@@ -19,6 +19,7 @@ import { parseProfileHtml, profileCounts } from "./profileCounts.ts";
 import { unavailableResult } from "./resultStatus.ts";
 import { zylaPagination, zylaMedia } from "./zylaPagination.ts";
 import { ZylaProviderError, zylaFailure, preserveZylaFailure } from "./zylaError.ts";
+import { SEARCH_REEL_PAGES, SEARCH_POST_PAGES, SEARCH_MAX_ITEMS, PUBLIC_DISCOVER_USERNAMES, discoverAllowed } from "./searchPolicy.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -1344,12 +1345,12 @@ async function zylaPages(username: string, pages: number, reel: boolean, startCu
   return { items: dedupeByCode(items), cursor: hasMore ? cursor : "", hasMore };
 }
 
-async function zylaScrape(username: string, pages = 4) {
+async function zylaScrape(username: string, pages = 4, postPages = pages) {
   if (!ZYLA_KEY && !ZYLA_CONNECTION_KEY) return null;
   const [profJson, reels, posts] = await Promise.all([
     zylaGet(`${ZYLA_PROFILE_EP}?username=${encodeURIComponent(username)}`).catch(preserveZylaFailure),
     zylaPages(username, pages, true).catch(preserveZylaFailure),
-    zylaPages(username, pages, false).catch(preserveZylaFailure),
+    zylaPages(username, postPages, false).catch(preserveZylaFailure),
   ]);
   const profile = zylaProfile(profJson?.data, username);
   const items = dedupeByCode([...(reels?.items || []), ...(posts?.items || [])]);
@@ -1499,6 +1500,36 @@ async function dbCacheGet(key: string): Promise<CacheRec | null> {
   }
 }
 
+/** Recently cloned accounts from the cache (no provider calls), trimmed for the Home feed. */
+async function discoverFromCache(): Promise<any[]> {
+  if (!SUPABASE_URL_ENV || !SUPABASE_SRK) return [];
+  try {
+    const r = await fetch(
+      `${SUPABASE_URL_ENV}/rest/v1/ig_scrape_cache?select=cache_key,payload&cache_key=in.(${PUBLIC_DISCOVER_USERNAMES.flatMap(u => [`${u}:full`, `${u}:lite`]).join(',')})&order=updated_at.desc&limit=40`,
+      {
+        headers: { apikey: SUPABASE_SRK, Authorization: `Bearer ${SUPABASE_SRK}`, Accept: "application/json" },
+        signal: AbortSignal.timeout(6000),
+      },
+    );
+    if (!r.ok) return [];
+    const rows = await r.json();
+    const seen = new Set<string>();
+    const out: any[] = [];
+    for (const row of Array.isArray(rows) ? rows : []) {
+      const p = row?.payload;
+      const u = String(p?.profile?.username || "").toLowerCase();
+      if (!u || seen.has(u) || !discoverAllowed(p?.profile)) continue;
+      if (!(p.reels?.length || p.posts?.length) || payloadMediaExpired(p)) continue;
+      seen.add(u);
+      out.push({ profile: p.profile, reels: (p.reels || []).slice(0, 6), posts: (p.posts || []).slice(0, 6) });
+      if (out.length >= 20) break;
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
 async function dbCacheSet(key: string, payload: unknown) {
   if (!SUPABASE_URL_ENV || !SUPABASE_SRK) return;
   try {
@@ -1572,21 +1603,26 @@ function applyTimelineStats(items: any[], stats: Map<string, { views: number; li
   return filled;
 }
 
+// ZylaLabs bills every call (~12 items per page). One user search spends at
+// most 6 calls — profile + 3 reels pages + 2 posts pages — and returns at most
+// 60 items, never the 30+30 page fan-out that cost 61 calls per search.
 async function buildForUsername(username: string, pages = 4, lite = false) {
-  if (ZYLA_CONNECTION_KEY) {
+  if (ZYLA_CONNECTION_KEY || ZYLA_KEY) {
     const statsPromise = igPublicTimelineStats(username);
-    const data = await zylaScrape(username, lite ? 1 : pages).catch(preserveZylaFailure);
+    const data = await zylaScrape(username, SEARCH_REEL_PAGES, SEARCH_POST_PAGES).catch(preserveZylaFailure);
     if (data?.profile && data.items.length) {
+      data.items = [...data.items]
+        .sort((a: any, b: any) => (Number(b.takenAt) || 0) - (Number(a.takenAt) || 0))
+        .slice(0, SEARCH_MAX_ITEMS);
       const stats = await statsPromise;
       const filled = applyTimelineStats(data.items, stats);
       console.log(JSON.stringify({ event: "zyla_stats_backfill", username, items: data.items.length, known: stats.size, filled }));
-      const cursor = zylaCursor(data);
       return {
         username, profile: data.profile,
         reels: data.items.filter((item: any) => item.isVideo),
         posts: data.items.filter((item: any) => !item.isVideo), highlights: [],
         profileOk: true, reelsOk: true, postsOk: true, highlightsOk: true,
-        reelsHasMore: !!cursor, reelsNextCursor: cursor,
+        reelsHasMore: false, reelsNextCursor: "",
         postsHasMore: false, postsNextCursor: "",
       };
     }
@@ -1616,7 +1652,7 @@ async function buildForUsername(username: string, pages = 4, lite = false) {
   // Start enrichers at the same time instead of waiting for Zyla and only then
   // starting Alpha. This removes a full provider timeout from failed clones.
   // Zyla already ran (and failed) above when its key exists; never pay twice.
-  const zylaPromise = lite || ZYLA_CONNECTION_KEY ? Promise.resolve(null) : zylaScrape(username, 4).catch((e) => {
+  const zylaPromise = lite || ZYLA_CONNECTION_KEY || ZYLA_KEY ? Promise.resolve(null) : zylaScrape(username, 4).catch((e) => {
     console.warn(JSON.stringify({ event: "zyla_build_failed", username, err: (e as Error).message }));
     return null;
   });
@@ -1970,6 +2006,11 @@ Deno.serve(async (req) => {
   } catch (_) {
     return json({ error: "invalid_json" }, 400, { "x-trace-id": traceId });
   }
+  // ---- Home feed: approved public showcase cache only; no user search history ----
+  if ((body as any).discover === true) {
+    return json({ accounts: await discoverFromCache() }, 200, { "x-trace-id": traceId, "x-cache": "DISCOVER" });
+  }
+
   const raw = String(body.username || "").trim().replace(/^@/, "").toLowerCase();
   if (!/^[a-z0-9._]{1,40}$/.test(raw)) {
     return json({ error: "invalid_username" }, 400, { "x-trace-id": traceId });

@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { isInstagramAccessKey } from '../_shared/access-key-format.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -90,7 +91,7 @@ Deno.serve(async (req) => {
     const normalizedKey = String(key || "").trim().toUpperCase();
     const normalizedFp = String(deviceFingerprint || "").trim();
 
-    if (!normalizedKey || !/^[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}$/.test(normalizedKey)) {
+    if (!isInstagramAccessKey(normalizedKey)) {
       return new Response(JSON.stringify({ valid: false, error: "Missing key" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -104,10 +105,10 @@ Deno.serve(async (req) => {
       });
     }
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
+    const url = Deno.env.get("SUPABASE_URL");
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!url || !serviceKey) return json({ valid: false, error: 'Verification temporarily unavailable' }, 503);
+    const supabase = createClient(url, serviceKey);
 
     try {
       await supabase.rpc("deactivate_expired_access_keys");
@@ -125,7 +126,6 @@ Deno.serve(async (req) => {
       // Migrate keys issued by the previous app backend. The old system stays
       // the authority for the original plan's validity and device limit.
       const lj = await legacyCheck(normalizedKey, normalizedFp);
-      console.log("legacy import check", normalizedKey.slice(0, 4), lj.status);
       if (lj.status === "valid" || lj.status === "device_limit") {
         const exp = lj.expiresAt;
         const nowIso = new Date().toISOString();
@@ -162,7 +162,6 @@ Deno.serve(async (req) => {
       if (Date.now() - lastChecked > 15 * 60 * 1000) {
         const fps0: string[] = Array.isArray(row.device_fingerprints) ? row.device_fingerprints : [];
         const lj = await legacyCheck(normalizedKey, fps0.includes(normalizedFp) ? normalizedFp : (fps0[0] || normalizedFp));
-        console.log("legacy recheck", normalizedKey.slice(0, 4), lj.status);
         const nowIso = new Date().toISOString();
         if (lj.status === "expired" || lj.status === "deactivated") {
           await supabase.from("access_keys").update({
@@ -198,7 +197,6 @@ Deno.serve(async (req) => {
         let legacyAllowed = false;
         if (row.legacy) {
           const lj = await legacyCheck(normalizedKey, normalizedFp);
-          console.log("legacy device check", normalizedKey.slice(0, 4), lj.status);
           if (lj.status === "valid") {
             legacyAllowed = true;
             maxDevices = Math.max(maxDevices + 1, lj.maxDevices || 0);

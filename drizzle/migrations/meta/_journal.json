@@ -8,6 +8,48 @@
       "when": 1792076083869,
       "tag": "0000_access_keys_legacy_tracking",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1794090715285,
+      "tag": "0001_oxapay_orders",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794094847263,
+      "tag": "0002_public_bot_products",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1794096038626,
+      "tag": "0003_public_bot_notifications",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794097699668,
+      "tag": "0004_public_bot_buyer_identity",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794102481524,
+      "tag": "0005_verified_payment_gate",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794102747188,
+      "tag": "0006_tiktok_verified_key_guard",
+      "breakpoints": true
     }
   ]
 }

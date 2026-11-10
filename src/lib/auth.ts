@@ -3,6 +3,8 @@
  * Uses Lovable Cloud Edge Functions for validation.
  */
 
+import { isInstagramAccessKey } from '../../supabase/functions/_shared/access-key-format';
+
 const AUTH_STORAGE_KEY = "darksidex_auth_session";
 const DEVICE_ID_KEY = "darksidex_device_id";
 const MANUAL_LOGOUT_KEY = "darksidex_manual_logout";
@@ -316,7 +318,7 @@ export type LoginResult =
 export async function validateAndLogin(accessKey: string): Promise<LoginResult> {
     const normalizedKey = accessKey.trim().toUpperCase();
 
-    if (!/^[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}$/.test(normalizedKey)) {
+    if (!isInstagramAccessKey(normalizedKey)) {
         return { success: false, error: "Please enter your access key." };
     }
 
