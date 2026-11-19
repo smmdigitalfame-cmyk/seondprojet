@@ -17,7 +17,7 @@ class PackageRules(unittest.TestCase):
 
     def test_metadata_and_dependencies_are_excluded(self):
         for name in ['.git/config', 'a/.git/config', 'node_modules/p/a.js',
-                     'a/dist/index.js', 'mem/index.md', '../secrets', '/root/pass']:
+                     'a/dist/index.js', 'mem/index.md', '../secrets', '/root/pass', 'PACKAGE-MANIFEST.json']:
             self.assertFalse(policy.include_path(name), name)
 
     def test_product_code_and_blank_settings_are_kept(self):

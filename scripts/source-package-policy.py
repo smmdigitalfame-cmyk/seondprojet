@@ -12,7 +12,7 @@ def include_path(name):
     if path.is_absolute() or '..' in path.parts or any(p in BLOCKED_PARTS for p in path.parts):
         return False
     base = path.name.lower()
-    if base in {'app.env', 'backup.env', 'rclone.conf', 'state.json', 'roadmap.md'}:
+    if base in {'app.env', 'backup.env', 'rclone.conf', 'state.json', 'roadmap.md', 'package-manifest.json'}:
         return False
     if base.startswith('.env') and base not in {'.env.example', '.env.template'}:
         return False
