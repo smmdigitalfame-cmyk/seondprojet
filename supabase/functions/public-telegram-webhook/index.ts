@@ -7,6 +7,9 @@ import { PRODUCTS, parsePurchase } from '../_shared/public-products.ts';
 import { reportBotEvent } from '../_shared/public-bot-notifications.ts';
 import { runBotReporting } from '../_shared/public-bot-background.ts';
 import { paymentCallbackUrl } from '../_shared/deployment-config.ts';
+import { handleBinanceSubscription } from '../_shared/binance-subscriptions.ts';
+import { paymentMethods } from '../_shared/public-bot-menu.ts';
+import { broadcastRequest, sendBroadcast } from '../_shared/public-broadcast.ts';
 
 async function recoverPurchases(chat: string) {
   const db = paymentDb();
@@ -58,6 +61,7 @@ Deno.serve(async (req: Request) => {
       // Old Telegram buttons can have an expired query id; do not block purchase recovery.
       await botCall('answerCallbackQuery', { callback_query_id: callback.id }).catch(() => undefined);
       const action = String(callback.data ?? '');
+      if (await handleBinanceSubscription(chat, update.update_id, undefined, action)) return new Response('ok', { headers: corsHeaders });
       if (action === 'product:instagram' || action === 'product:tiktok') {
         await botCall('sendMessage', { chat_id: chat, ...productPlans(action === 'product:tiktok' ? 'tiktok' : 'instagram') });
       } else if (action.startsWith('menu:')) {
@@ -72,13 +76,17 @@ Deno.serve(async (req: Request) => {
           if (!paid) await botCall('sendMessage', { chat_id: chat, text: 'Payment is not confirmed yet. Please check again after confirmation.' });
           else await botCall('sendMessage', { chat_id: chat, text: 'Payment confirmed. Your purchase is ready.', reply_markup: { inline_keyboard: [[{ text: 'Get my APK & key', callback_data: 'menu:keys' }], [{ text: 'Back to menu', callback_data: 'menu:home' }]] } });
         }
-      } else if (action.startsWith('buy:')) {
-        const purchase = parsePurchase(action);
+      } else if (action.startsWith('buy:') || action.startsWith('pay:oxapay:')) {
+        const purchase = parsePurchase(action.replace('pay:oxapay:', 'buy:'));
         if (!purchase) {
           await botCall('sendMessage', { chat_id: chat, ...BOT_HOME });
           return new Response('ok', { headers: corsHeaders });
         }
         const { product, plan: planId } = purchase;
+        if (action.startsWith('buy:')) {
+          await botCall('sendMessage', { chat_id: chat, ...paymentMethods(product, planId) });
+          return new Response('ok', { headers: corsHeaders });
+        }
         const plan = PUBLIC_PLANS[planId];
         const { data: order, error } = await db.from('oxapay_orders').upsert({ product, telegram_chat_id: chat, telegram_update_id: update.update_id, plan_id: planId, amount: plan.amount, currency: 'USD', duration_days: plan.days }, { onConflict: 'telegram_update_id', ignoreDuplicates: true }).select('*').maybeSingle();
         if (error) throw new Error('Order creation failed');
@@ -95,7 +103,31 @@ Deno.serve(async (req: Request) => {
         }
         await botCall('sendMessage', { chat_id: chat, parse_mode: 'HTML', text: `<b>YOUR ORDER IS READY</b>\n\n<b>${PRODUCTS[product].title}</b>\n<b>${plan.title} · $${plan.amount} USD</b>\nAndroid APK + access key\n\nSecure checkout with OxaPay. Invoice valid for 60 minutes.\nYour purchase arrives after crypto confirmation.`, reply_markup: { inline_keyboard: [[{ text: `Pay $${plan.amount} securely`, url: existing.payment_url }], [{ text: 'Check payment', callback_data: `check:${existing.id}` }], [{ text: 'My APK & keys', callback_data: 'menu:keys' }, { text: 'Help', callback_data: 'menu:help' }]] } });
       }
-    } else if (typeof message.text === 'string') {
+    } else {
+      // Payment sessions take precedence over ordinary admin announcement text.
+      if (typeof message.text === 'string' && await handleBinanceSubscription(chat, update.update_id, message.text)) return new Response('ok', { headers: corsHeaders });
+      const adminIds = ['TELEGRAM_ADMIN_CHAT_ID_1', 'TELEGRAM_ADMIN_CHAT_ID_2', 'TELEGRAM_ADMIN_CHAT_ID_3'].map(name => Deno.env.get(name) ?? '');
+      const announcement = broadcastRequest(chat, adminIds, message);
+      if (announcement) {
+        if (!announcement.copy && !announcement.text) {
+          await botCall('sendMessage', { chat_id: chat, text: 'Send /broadcast followed by your announcement, or send a normal message/photo here.' });
+          return new Response('ok', { headers: corsHeaders });
+        }
+        const ids: string[] = [];
+        for (let from = 0; ; from += 1000) {
+          const { data, error } = await db.from('public_bot_users').select('telegram_chat_id').order('telegram_chat_id').range(from, from + 999);
+          if (error) throw new Error('Broadcast audience unavailable');
+          ids.push(...(data ?? []).map(row => String(row.telegram_chat_id)));
+          if (!data || data.length < 1000) break;
+        }
+        await botCall('sendMessage', { chat_id: chat, text: `📢 Sending your announcement to ${new Set(ids).size} users…` });
+        const result = await sendBroadcast(ids, id => announcement.copy
+          ? botCall('copyMessage', { chat_id: id, from_chat_id: chat, message_id: message.message_id })
+          : botCall('sendMessage', { chat_id: id, text: announcement.text }));
+        await botCall('sendMessage', { chat_id: chat, text: `✅ Broadcast complete\n📨 Sent: ${result.sent}\n🚫 Failed/blocked: ${result.failed}` });
+        return new Response('ok', { headers: corsHeaders });
+      }
+      if (typeof message.text !== 'string') return new Response('ok', { headers: corsHeaders });
       const command = botCommand(message.text);
       if (command === '/start') {
         // Returning from checkout reopens the chat; the key + APK were already sent on payment.

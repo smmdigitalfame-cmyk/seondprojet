@@ -146,6 +146,230 @@ export type Database = {
         }
         Relationships: []
       }
+      binance_checkouts: {
+        Row: {
+          created_at: string
+          order_id: string
+          payment_usdt: number
+          status: string
+          submitted_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          order_id: string
+          payment_usdt: number
+          status?: string
+          submitted_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          order_id?: string
+          payment_usdt?: number
+          status?: string
+          submitted_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "binance_checkouts_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: true
+            referencedRelation: "oxapay_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      binance_subscription_claims: {
+        Row: {
+          alias: string
+          order_id: string
+        }
+        Insert: {
+          alias: string
+          order_id: string
+        }
+        Update: {
+          alias?: string
+          order_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "binance_subscription_claims_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "oxapay_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bot_wallet_notifications: {
+        Row: {
+          delivered_at: string | null
+          id: string
+          kind: string
+          recipient: string
+          topup_id: string
+        }
+        Insert: {
+          delivered_at?: string | null
+          id?: string
+          kind: string
+          recipient: string
+          topup_id: string
+        }
+        Update: {
+          delivered_at?: string | null
+          id?: string
+          kind?: string
+          recipient?: string
+          topup_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bot_wallet_notifications_topup_id_fkey"
+            columns: ["topup_id"]
+            isOneToOne: false
+            referencedRelation: "bot_wallet_topups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bot_wallet_sessions: {
+        Row: {
+          request_id: string | null
+          step: string
+          telegram_chat_id: string
+          updated_at: string
+        }
+        Insert: {
+          request_id?: string | null
+          step: string
+          telegram_chat_id: string
+          updated_at?: string
+        }
+        Update: {
+          request_id?: string | null
+          step?: string
+          telegram_chat_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      bot_wallet_settings: {
+        Row: {
+          id: number
+          updated_at: string
+          usdt_rate: number
+        }
+        Insert: {
+          id?: number
+          updated_at?: string
+          usdt_rate?: number
+        }
+        Update: {
+          id?: number
+          updated_at?: string
+          usdt_rate?: number
+        }
+        Relationships: []
+      }
+      bot_wallet_topups: {
+        Row: {
+          amount_paise: number
+          approval_mode: string | null
+          created_at: string
+          credited_at: string | null
+          expected_usdt: number
+          id: string
+          payment_usdt: number
+          provider_verified_at: string | null
+          review_reason: string | null
+          reviewed_by: string | null
+          status: string
+          submitted_id: string | null
+          telegram_chat_id: string
+          update_id: number
+          usdt_rate: number
+        }
+        Insert: {
+          amount_paise: number
+          approval_mode?: string | null
+          created_at?: string
+          credited_at?: string | null
+          expected_usdt: number
+          id?: string
+          payment_usdt: number
+          provider_verified_at?: string | null
+          review_reason?: string | null
+          reviewed_by?: string | null
+          status?: string
+          submitted_id?: string | null
+          telegram_chat_id: string
+          update_id: number
+          usdt_rate: number
+        }
+        Update: {
+          amount_paise?: number
+          approval_mode?: string | null
+          created_at?: string
+          credited_at?: string | null
+          expected_usdt?: number
+          id?: string
+          payment_usdt?: number
+          provider_verified_at?: string | null
+          review_reason?: string | null
+          reviewed_by?: string | null
+          status?: string
+          submitted_id?: string | null
+          telegram_chat_id?: string
+          update_id?: number
+          usdt_rate?: number
+        }
+        Relationships: []
+      }
+      bot_wallet_transaction_claims: {
+        Row: {
+          alias: string
+          created_at: string
+          topup_id: string
+        }
+        Insert: {
+          alias: string
+          created_at?: string
+          topup_id: string
+        }
+        Update: {
+          alias?: string
+          created_at?: string
+          topup_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bot_wallet_transaction_claims_topup_id_fkey"
+            columns: ["topup_id"]
+            isOneToOne: false
+            referencedRelation: "bot_wallet_topups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bot_wallets: {
+        Row: {
+          balance_paise: number
+          telegram_chat_id: string
+          updated_at: string
+        }
+        Insert: {
+          balance_paise?: number
+          telegram_chat_id: string
+          updated_at?: string
+        }
+        Update: {
+          balance_paise?: number
+          telegram_chat_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       ig_scrape_cache: {
         Row: {
           cache_key: string
@@ -163,6 +387,77 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      oxapay_orders: {
+        Row: {
+          access_key_id: string | null
+          amount: number
+          created_at: string
+          currency: string
+          delivered_at: string | null
+          duration_days: number | null
+          external_key_code: string | null
+          external_key_expires_at: string | null
+          id: string
+          payment_provider: string
+          payment_url: string | null
+          payment_verified_at: string | null
+          plan_id: string
+          product: string
+          status: string
+          telegram_chat_id: string
+          telegram_update_id: number
+          track_id: string | null
+        }
+        Insert: {
+          access_key_id?: string | null
+          amount: number
+          created_at?: string
+          currency?: string
+          delivered_at?: string | null
+          duration_days?: number | null
+          external_key_code?: string | null
+          external_key_expires_at?: string | null
+          id?: string
+          payment_provider?: string
+          payment_url?: string | null
+          payment_verified_at?: string | null
+          plan_id: string
+          product?: string
+          status?: string
+          telegram_chat_id: string
+          telegram_update_id: number
+          track_id?: string | null
+        }
+        Update: {
+          access_key_id?: string | null
+          amount?: number
+          created_at?: string
+          currency?: string
+          delivered_at?: string | null
+          duration_days?: number | null
+          external_key_code?: string | null
+          external_key_expires_at?: string | null
+          id?: string
+          payment_provider?: string
+          payment_url?: string | null
+          payment_verified_at?: string | null
+          plan_id?: string
+          product?: string
+          status?: string
+          telegram_chat_id?: string
+          telegram_update_id?: number
+          track_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "oxapay_orders_access_key_id_fkey"
+            columns: ["access_key_id"]
+            isOneToOne: false
+            referencedRelation: "access_keys"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       payment_user_links: {
         Row: {
@@ -194,6 +489,57 @@ export type Database = {
           source?: string
           telegram_chat_id?: string | null
           used_at?: string | null
+        }
+        Relationships: []
+      }
+      public_bot_notifications: {
+        Row: {
+          claim_token: string | null
+          claimed_at: string | null
+          created_at: string
+          delivered_at: string | null
+          event_id: string
+          kind: string
+          payload: Json
+        }
+        Insert: {
+          claim_token?: string | null
+          claimed_at?: string | null
+          created_at?: string
+          delivered_at?: string | null
+          event_id: string
+          kind: string
+          payload: Json
+        }
+        Update: {
+          claim_token?: string | null
+          claimed_at?: string | null
+          created_at?: string
+          delivered_at?: string | null
+          event_id?: string
+          kind?: string
+          payload?: Json
+        }
+        Relationships: []
+      }
+      public_bot_users: {
+        Row: {
+          first_seen_at: string
+          telegram_chat_id: string
+          telegram_name: string | null
+          telegram_username: string | null
+        }
+        Insert: {
+          first_seen_at?: string
+          telegram_chat_id: string
+          telegram_name?: string | null
+          telegram_username?: string | null
+        }
+        Update: {
+          first_seen_at?: string
+          telegram_chat_id?: string
+          telegram_name?: string | null
+          telegram_username?: string | null
         }
         Relationships: []
       }
@@ -310,7 +656,73 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      claim_public_bot_notifications: {
+        Args: never
+        Returns: {
+          claim_token: string | null
+          claimed_at: string | null
+          created_at: string
+          delivered_at: string | null
+          event_id: string
+          kind: string
+          payload: Json
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "public_bot_notifications"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      credit_bot_wallet: {
+        Args: {
+          p_actor: string
+          p_aliases: string[]
+          p_mode: string
+          p_topup_id: string
+          p_verified?: boolean
+        }
+        Returns: boolean
+      }
       deactivate_expired_access_keys: { Args: never; Returns: number }
+      fulfill_binance_subscription: {
+        Args: {
+          p_aliases: string[]
+          p_amount: number
+          p_order_id: string
+          p_verified: boolean
+        }
+        Returns: string
+      }
+      fulfill_oxapay_order: {
+        Args: {
+          p_amount: number
+          p_currency: string
+          p_order_id: string
+          p_track_id: string
+        }
+        Returns: string
+      }
+      fulfill_verified_oxapay_order: {
+        Args: {
+          p_amount: number
+          p_currency: string
+          p_order_id: string
+          p_provider_order_id: string
+          p_provider_status: string
+          p_track_id: string
+        }
+        Returns: string
+      }
+      public_bot_totals: { Args: never; Returns: Json }
+      record_public_bot_event: {
+        Args: { p_id: string; p_kind: string }
+        Returns: undefined
+      }
+      save_tiktok_order_key: {
+        Args: { p_expires_at: string; p_key_code: string; p_order_id: string }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never

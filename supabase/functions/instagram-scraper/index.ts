@@ -1505,7 +1505,7 @@ async function discoverFromCache(): Promise<any[]> {
   if (!SUPABASE_URL_ENV || !SUPABASE_SRK) return [];
   try {
     const r = await fetch(
-      `${SUPABASE_URL_ENV}/rest/v1/ig_scrape_cache?select=cache_key,payload&cache_key=in.(${PUBLIC_DISCOVER_USERNAMES.flatMap(u => [`${u}:full`, `${u}:lite`]).join(',')})&order=updated_at.desc&limit=40`,
+      `${SUPABASE_URL_ENV}/rest/v1/ig_scrape_cache?select=cache_key,payload&cache_key=like.*:full&order=updated_at.desc&limit=80`,
       {
         headers: { apikey: SUPABASE_SRK, Authorization: `Bearer ${SUPABASE_SRK}`, Accept: "application/json" },
         signal: AbortSignal.timeout(6000),
@@ -1522,7 +1522,7 @@ async function discoverFromCache(): Promise<any[]> {
       if (!(p.reels?.length || p.posts?.length) || payloadMediaExpired(p)) continue;
       seen.add(u);
       out.push({ profile: p.profile, reels: (p.reels || []).slice(0, 6), posts: (p.posts || []).slice(0, 6) });
-      if (out.length >= 20) break;
+      if (out.length >= 40) break;
     }
     return out;
   } catch {

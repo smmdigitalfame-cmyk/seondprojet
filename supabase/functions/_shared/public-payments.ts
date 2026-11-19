@@ -58,6 +58,7 @@ export async function verifyAndFulfill(orderId: string) {
     await reportBotEvent(db, botCall, Deno.env.get('PUBLIC_BOT_NOTIFICATION_CHAT_ID'), 'sale', order.id);
     return true;
   }
+  if (order.payment_provider === 'binance') return false;
   const payment = await oxaCall(`/${encodeURIComponent(order.track_id)}`);
   if (String(payment.status).toLowerCase() !== 'paid') return false;
   if (!verifiedPaymentMatches(order, payment)) throw new Error('Payment mismatch');

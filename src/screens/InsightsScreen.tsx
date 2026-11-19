@@ -360,7 +360,7 @@ const LineChart = ({
     bottom: bottomLabel ?? formatCompactMetric(0),
   };
   return (
-    <div className="flex gap-2">
+    <div className="grid min-w-0 grid-cols-[2.5rem_minmax(0,1fr)] gap-2">
       <div className="flex flex-col justify-between h-[150px] py-[2px] w-10 shrink-0 text-right">
         {(["top", "mid", "bottom"] as const).map((key) =>
           editing ? (
@@ -377,8 +377,8 @@ const LineChart = ({
           )
         )}
       </div>
-      <div className="relative w-full h-[150px]">
-        <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="w-full h-[150px]">
+      <div className="relative min-w-0 h-[150px]">
+        <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="block w-full min-w-0 h-[150px]">
           {[10, (h + 10) / 2, h].map((y, i) => (
             <line key={i} x1="0" x2={w} y1={y} y2={y} stroke="hsl(var(--border))" strokeWidth="0.6" />
           ))}
@@ -441,7 +441,7 @@ const AudienceLineChart = ({
   }).filter(Boolean).join(" ");
 
   return (
-    <div className="flex gap-3">
+    <div className="grid min-w-0 grid-cols-[2.5rem_minmax(0,1fr)] gap-3">
       <div className="h-[116px] w-10 shrink-0 flex flex-col justify-between py-[2px] text-right text-[11px] text-muted-foreground">
         {(["top", "mid", "bottom"] as const).map((key) => {
           const value = key === "top" ? topLabel : key === "mid" ? midLabel : bottomLabel;
@@ -457,7 +457,7 @@ const AudienceLineChart = ({
           );
         })}
       </div>
-      <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="h-[116px] w-full overflow-visible">
+      <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="block h-[116px] w-full min-w-0 overflow-visible">
         {[top, y(0), bottom].map((lineY) => (
           <line key={lineY} x1="0" x2={width} y1={lineY} y2={lineY} stroke="hsl(var(--border))" strokeWidth="0.6" />
         ))}
@@ -1213,7 +1213,7 @@ const InsightsScreen = () => {
 
           <section className="pt-12">
             <h2 className="text-[16px] font-bold mb-5">Follower growth over time</h2>
-            <div className="flex gap-2.5 mb-12">
+            <div className="flex flex-wrap gap-2.5 mb-12">
               {["Overall", "Follows", "Unfollows"].map((item) => <button key={item} onClick={() => setAudienceGrowthTab(item)} className={cn("h-[42px] px-5 rounded-full border text-[12px] font-semibold", audienceGrowthTab === item ? "bg-secondary border-transparent" : "border-border")}>{item}</button>)}
             </div>
             <div
@@ -1238,8 +1238,8 @@ const InsightsScreen = () => {
                 }
               />
             </div>
-            <div className="flex justify-between pl-11 pt-2 text-[12px] text-muted-foreground">
-              {(["followerGraphStart", "followerGraphMid", "followerGraphEnd"] as const).map((key) => isEditing ? <input key={key} className="w-16 bg-secondary rounded text-center outline-none" value={data[key]} onChange={(e) => update(key, e.target.value)} /> : <span key={key}>{data[key]}</span>)}
+            <div className="grid grid-cols-3 gap-1 pl-[52px] pt-2 text-[12px] text-muted-foreground">
+              {(["followerGraphStart", "followerGraphMid", "followerGraphEnd"] as const).map((key, index) => isEditing ? <input key={key} className="w-full min-w-0 bg-secondary rounded text-center outline-none" value={data[key]} onChange={(e) => update(key, e.target.value)} /> : <span key={key} className={cn("min-w-0 break-words", index === 1 && "text-center", index === 2 && "text-right")}>{data[key]}</span>)}
             </div>
           </section>
 
@@ -1298,7 +1298,7 @@ const InsightsScreen = () => {
             <AudienceInfoTitle>Follower active times</AudienceInfoTitle>
             <p className="mt-1 text-[12px] text-muted-foreground">Based on your current time zone (IST)</p>
             <div className="flex gap-3 mt-5 overflow-x-auto no-scrollbar -mx-[27px] px-[27px]">{["Su", "M", "Tu", "W", "Th", "F", "Sa"].map((day) => <button key={day} onClick={() => setAudienceDay(day)} className={cn("shrink-0 h-[54px] w-[54px] rounded-full border text-[13px] font-semibold", audienceDay === day ? "bg-secondary border-transparent" : "border-border")}>{day}</button>)}</div>
-            <div className="h-[235px] flex items-end gap-2 mt-7">
+            <div className="h-[235px] grid grid-cols-8 items-end gap-2 mt-7">
               {data.audienceActiveTimes.map((item, index) => <div key={item.time} className="h-full flex-1 flex flex-col justify-end items-center"><div className="w-full ig-bar-magenta rounded-[6px]" style={{ height: `${item.height}%` }} />{isEditing && <input type="number" className="mt-1 w-full bg-secondary text-center text-[9px] rounded outline-none" value={item.height} onChange={(e) => update("audienceActiveTimes", data.audienceActiveTimes.map((bar, i) => i === index ? { ...bar, height: Math.min(100, Math.max(0, Number(e.target.value))) } : bar))} />}</div>)}
             </div>
 

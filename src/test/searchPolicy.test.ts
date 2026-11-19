@@ -5,8 +5,8 @@ describe('Paid search and public discovery boundaries', () => {
     expect(1 + SEARCH_REEL_PAGES + SEARCH_POST_PAGES).toBe(6);
   });
   it('limits cloned items to sixty', () => expect(SEARCH_MAX_ITEMS).toBe(60));
-  it('does not disclose arbitrary recently searched accounts', () => {
-    expect(discoverAllowed({ username: 'buyer_private_search' })).toBe(false);
+  it('mixes any public account searched by users into Home', () => {
+    expect(discoverAllowed({ username: 'buyer_public_search' })).toBe(true);
     expect(discoverAllowed({ username: 'cristiano' })).toBe(true);
   });
   it('excludes private accounts for either provider field', () => {

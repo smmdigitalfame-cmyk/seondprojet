@@ -16,12 +16,12 @@ Existing GitHub repository and Vercel project are unchanged. The Lovable preview
 
 ## External Telegram deployment adjustments
 
-The externally deployed `telegram-webhook` includes two deployment-only adjustments to the repository version:
+The repository now includes the admin webhook protections required by external deployment:
 
 1. Before parsing a request, reject it with 401 unless its `x-telegram-bot-api-secret-token` header matches the server-only `TELEGRAM_WEBHOOK_SECRET`.
 2. Construct payment links using server-only `PAYMENT_PAGE_URL`, set to the existing production app's `/pay` page.
 
-Telegram's webhook registration includes the same server-only secret. Keep these adjustments on subsequent external function deployments; do not redeploy the unauthenticated repository webhook unchanged. No UI or application features were changed.
+Telegram's webhook registration includes the same server-only secret (or a matching token-derived fallback). The public bot uses its separate secret. See [DEPLOYMENT.md](DEPLOYMENT.md) and the protected deployment workflow for future releases. No UI or application features were changed.
 
 ## Verification performed
 

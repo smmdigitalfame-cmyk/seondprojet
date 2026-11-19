@@ -1,4 +1,7 @@
 # Project architecture rules
+- Route paid orders by product; TikTok mints remotely; send matching APK/key only on success.
+- Require server-rechecked provider identity/plan terms and atomic verification stamps for purchases; immutable terms and service-only RPCs block client minting. Deployment automation uses protected secrets and stops on missing base schema.
+- Keep Home/Profile headers in sticky document flow with shrinkable name tracks and safe-area side gutters, so content cannot overlap a mismatched fixed-header spacer on phones.
 - Use the linked ZylaLabs connection for primary profile/posts/reels reads and preserve both nested pagination cursors in a provider-tagged continuation, so quick clones and later pages use the same source without exposing credentials.
 - Treat empty or failed scraper-provider responses as temporary unavailability, not proof of a missing/private Instagram account, so upstream outages cannot mislabel valid usernames.
 - Proxy Lovable Assets paths through an explicit Vercel rewrite before the SPA fallback, so relative CDN pointers remain portable without changing backend settings or duplicating media.
@@ -23,6 +26,7 @@
 - Serve the downloadable 4K tutorial through Lovable Assets, so large media stays off the app bundle and downloads quickly.
 - Cache finished scraper payloads in the `ig_scrape_cache` table and serve them stale-while-revalidate, so app opens and repeat clones never wait on slow providers.
 - Paid scraper calls happen only on a user search/clone (one request per search): `pages: 1` requests are cache-only, the Home feed never fetches, and there are no background, retry or app-open refreshes, because provider calls are billed.
+- A search spends a small fixed ZylaLabs page budget (profile + a few reels/posts pages, capped item count), ignoring the client `pages` value, because per-page fan-out cost 61 calls per search.
 - Store the connected account's avatar as a small data URL, because signed CDN avatar links expire and appear broken.
 - Keys imported from the previous backend are flagged `legacy`; the old backend stays the source of truth for their expiry, revocation and extra device slots (rechecked periodically), because their plan details were never copied over.
 - Detect signed media expiry (`exp`/`oe` stamps) on stored reels and in scraper cache payloads; refresh only media links by `sourceId` and never serve expired cached payloads, so cloned thumbnails do not turn into "No preview" hours later.

@@ -27,7 +27,7 @@ export const DISCOVER_USERNAMES = [
 // Cached records contain short-lived signed CDN URLs. Keeping this cache for a
 // year made story/profile images permanently broken after the signatures
 // expired. The version bump immediately drops those stale records on devices.
-const CACHE_KEY = "discover_feed_v7_cloned";
+const CACHE_KEY = "discover_feed_v8_global";
 const CACHE_TTL_MS = 30 * 60 * 1000;
 
 export interface DiscoverProfile {

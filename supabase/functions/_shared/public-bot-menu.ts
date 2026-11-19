@@ -18,7 +18,7 @@ export const TUTORIAL_URLS: Record<Product, string> = {
 };
 const OWNER_HELP = `🆘 <b>Need help or facing an issue?</b>\nContact the owner: <a href="${OWNER_URL}">@TheDanielBrooks</a>`;
 export const BOT_HOME = {
-  text: '✨ <b>WELCOME TO INSIGHT EDITOR</b>\n\n▶️ <b>See it before you buy</b>\nWatch your app’s YouTube demo to see the interface and how editing works. The same video is your how-to guide after purchase.\n\n1️⃣ Choose Instagram or TikTok\n2️⃣ Choose your access plan\n3️⃣ Pay securely with OxaPay\n\n✅ After payment verification, receive your selected app’s APK + access key automatically, with its how-to video button.\n🔑 Instagram and TikTok have separate keys.\n\n' + OWNER_HELP + '\n\n👇 <b>Watch a demo or choose your app</b>',
+  text: '✨ <b>WELCOME TO INSIGHT EDITOR</b>\n\n▶️ <b>See it before you buy</b>\nWatch your app’s YouTube demo to see the interface and how editing works. The same video is your how-to guide after purchase.\n\n1️⃣ Choose Instagram or TikTok\n2️⃣ Choose your access plan\n3️⃣ Pay with Binance Pay or OxaPay\n\n✅ After payment verification, receive your selected app’s APK + access key automatically, with its how-to video button.\n🔑 Instagram and TikTok have separate keys.\n\n' + OWNER_HELP + '\n\n👇 <b>Watch a demo or choose your app</b>',
   parse_mode: 'HTML',
   reply_markup: { inline_keyboard: [
     [{ text: '📸 Instagram Editor', callback_data: 'product:instagram' }, { text: '🎵 TikTok Editor', callback_data: 'product:tiktok' }],
@@ -60,6 +60,14 @@ export function productPlans(product: Product) {
     [{ text: '▶️ YouTube · Demo & how to use', url: TUTORIAL_URLS[product] }],
     ...Object.entries(PUBLIC_PLANS).map(([id, plan]) => [{ text: `${plan.title} — $${plan.amount}`, callback_data: `buy:${product}:${id}` }]),
     [{ text: '⬅️ Change app', callback_data: 'menu:home' }],
+  ] } };
+}
+export function paymentMethods(product: Product, planId: keyof typeof PUBLIC_PLANS) {
+  const plan = PUBLIC_PLANS[planId];
+  return { text: `💳 ${PRODUCTS[product].title}\n${plan.title} · $${plan.amount}\n\nChoose payment method. Your APK + key arrive after payment verification.`, reply_markup: { inline_keyboard: [
+    [{ text: '🟡 Binance Pay · USDT', callback_data: `pay:binance:${product}:${planId}` }],
+    [{ text: '💎 Crypto · OxaPay', callback_data: `pay:oxapay:${product}:${planId}` }],
+    [{ text: '⬅️ Change plan', callback_data: `product:${product}` }],
   ] } };
 }
 export const BOT_HELP = {

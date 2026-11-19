@@ -14,10 +14,23 @@ body {
   overscroll-behavior-y: none;
   overscroll-behavior-x: none;
   -webkit-overflow-scrolling: touch;
+  /* Stop sideways drift on phones (clip keeps sticky headers working) */
+  max-width: 100%;
+  overflow-x: hidden;
+  overflow-x: clip;
 }
 
 #root {
   overscroll-behavior: none;
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: clip;
+}
+
+/* Media can shrink, but SVG icons keep their explicit dimensions. Charts
+   constrain their own plot tracks instead of relying on a global SVG clamp. */
+img, video, canvas {
+  max-width: 100%;
 }
 
 *::-webkit-scrollbar {

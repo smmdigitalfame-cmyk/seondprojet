@@ -1,0 +1,2 @@
+- Route Binance subscription checkout through provider-tagged shared purchase records and a service-only atomic receipt-claim RPC before existing product delivery, so repeated receipts cannot mint twice and recovery works across providers; preserve legacy wallet data without exposing funding flows.
+- Verify Binance subscriptions by the USDT actually received against the plan's USD price, with one-claim-per-receipt as the ownership guard, because buyers pay plain plan prices without INR conversion or fractional amounts.

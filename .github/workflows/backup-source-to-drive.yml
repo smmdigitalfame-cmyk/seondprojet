@@ -1,0 +1,44 @@
+name: Backup current source to Drive
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: drive-source-backup
+  cancel-in-progress: false
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify private backup settings
+        env:
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PASSWORD: ${{ secrets.VPS_PASSWORD }}
+          VPS_HOST_KEY: ${{ vars.VPS_HOST_KEY }}
+        run: |
+          test -n "$VPS_USER" && test -n "$VPS_PASSWORD" && test -n "$VPS_HOST_KEY"
+      - name: Create credential-free source package
+        run: |
+          python3 scripts/test_source_package_policy.py
+          python3 - <<'PY'
+          import importlib.util, pathlib, os
+          spec = importlib.util.spec_from_file_location('policy', 'scripts/source-package-policy.py')
+          p = importlib.util.module_from_spec(spec); spec.loader.exec_module(p)
+          p.package(pathlib.Path('.'), pathlib.Path('/tmp/Instagram-complete-source.zip'), 'Instagram', os.environ['GITHUB_SHA'], pathlib.Path('SOURCE-PACKAGES.md').read_text())
+          PY
+      - name: Upload source only and refresh private Drive files
+        env:
+          SSHPASS: ${{ secrets.VPS_PASSWORD }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_HOST_KEY: ${{ vars.VPS_HOST_KEY }}
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
+          mkdir -p ~/.ssh
+          printf '%s\n' "$VPS_HOST_KEY" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+          sshpass -e scp -o StrictHostKeyChecking=yes /tmp/Instagram-complete-source.zip "$VPS_USER@87.232.72.88:/root/backups/source-packages/incoming-instagram.zip"
+          sshpass -e ssh -o StrictHostKeyChecking=yes "$VPS_USER@87.232.72.88" "python3 /root/backups/source-packages/import-source-package.py '$GITHUB_SHA'"
