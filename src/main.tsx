@@ -39,7 +39,7 @@ import { registerAppWorker } from "./lib/registerAppWorker";
     const html = document.documentElement;
     const metas = () => Array.from(document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]'));
     const sync = () => {
-      const color = html.classList.contains("dark") ? "#0c0f13" : "#ffffff";
+      const color = html.classList.contains("dark") ? "#0c0f13" : "#000000";
       let list = metas();
       if (list.length === 0) {
         const m = document.createElement("meta");
@@ -58,7 +58,7 @@ import { registerAppWorker } from "./lib/registerAppWorker";
     // Android can fall back to the install color after the app resumes (e.g. returning
     // from the photo picker), so re-apply the theme color whenever the app comes back.
     const resync = () => {
-      metas().forEach((m) => { m.content = html.classList.contains("dark") ? "#0c0f14" : "#fefefe"; });
+      metas().forEach((m) => { m.content = html.classList.contains("dark") ? "#0c0f14" : "#010101"; });
       requestAnimationFrame(sync);
     };
     document.addEventListener("visibilitychange", () => { if (!document.hidden) resync(); });
