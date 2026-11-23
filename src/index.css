@@ -361,6 +361,7 @@ html.ios-standalone body::before {
   pointer-events: none;
 }
 html.ios-standalone .sticky.top-0 { top: env(safe-area-inset-top, 0px); }
+html.ios-standalone .sticky.top-\[50px\] { top: calc(50px + env(safe-area-inset-top, 0px)); }
 html.ios-standalone .fixed.top-0:not(.inset-0) { top: env(safe-area-inset-top, 0px); }
 html.ios-standalone .fixed.inset-0 { padding-top: env(safe-area-inset-top, 0px); }
 html.ios-standalone .fixed.bottom-0 { padding-bottom: env(safe-area-inset-bottom, 0px); }
