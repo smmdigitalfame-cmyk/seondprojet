@@ -66,6 +66,8 @@ img, video, canvas {
     --insights-summary: 210 13% 94%;
     --insights-loading: 180 14% 97%;
     --insights-loading-shine: 0 0% 100%;
+    --insights-graph-line: 292 96% 62%;
+    --insights-graph-tooltip: 0 0% 93%;
     --sidebar-background: 0 0% 98%;
     --sidebar-foreground: 240 5.3% 26.1%;
     --sidebar-primary: 240 5.9% 10%;
@@ -99,6 +101,7 @@ img, video, canvas {
     --insights-summary: 240 3% 11%;
     --insights-loading: 213 18% 14%;
     --insights-loading-shine: 213 14% 20%;
+    --insights-graph-tooltip: 210 10% 13%;
     --sidebar-background: 240 5.9% 10%;
     --sidebar-foreground: 240 4.8% 95.9%;
     --sidebar-primary: 224.3 76.3% 48%;
@@ -127,6 +130,14 @@ img, video, canvas {
 }
 
 @layer utilities {
+  .insight-scrub-plot { touch-action: pan-y; }
+  .insight-graph-line { stroke: hsl(var(--insights-graph-line)); }
+  .insight-graph-swatch { background: hsl(var(--insights-graph-line)); }
+  .insight-graph-typical { stroke: hsl(var(--muted-foreground)); }
+  .insight-graph-grid { stroke: hsl(var(--border)); stroke-width: 0.6; opacity: 0.45; }
+  .insight-graph-cursor { stroke: hsl(var(--muted-foreground)); stroke-width: 1; }
+  .insight-graph-dot { fill: hsl(var(--insights-graph-line)); }
+  .insight-graph-readout { background: hsl(var(--insights-graph-tooltip)); color: hsl(var(--foreground)); }
 
   .app-topbar {
     padding-left: max(12px, env(safe-area-inset-left, 0px));

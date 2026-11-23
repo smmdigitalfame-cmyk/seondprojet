@@ -10,38 +10,16 @@ import { useNavigate, useParams } from "react-router-dom";
 import { mockAccounts, currentUser } from "@/data/mockData";
 import { getCurrentReelsScope, loadReelsData, saveReelsData } from "@/data/reelInsightsData";
 import { cn } from "@/lib/utils";
-import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, CartesianGrid, ReferenceLine, LineChart, Line } from "recharts";
 import GraphEditorModal from "@/components/GraphEditorModal";
+import InsightScrubChart from "@/components/InsightScrubChart";
+import { niceGraphTop, fitGraphToTotal } from "@/lib/insightGraph";
 import RetentionEditorModal from "@/components/RetentionEditorModal";
 import { uploadToCloudinary } from "@/lib/cloudinary";
 import { applyOverrideToReel, getOverrideSync, getReelsAccountKey, mergeAndSaveOverride } from "@/lib/reelsDataStore";
 import { getReelGraphVisibility, setReelGraphVisibility } from "@/lib/reelGraphVisibility";
 
-// Seeded pseudo-random number generator
-const seededRandom = (seed: number) => {
-  let s = seed;
-  return () => {
-    s = (s * 16807 + 0) % 2147483647;
-    return (s - 1) / 2147483646;
-  };
-};
-
-// Auto-calculate the next nice Y-axis interval (Instagram style: steps of 1, 2, 2.5, 5, 10)
-const getNiceTopValue = (val: number) => {
-  if (val <= 0) return 100;
-  const magnitude = Math.pow(10, Math.floor(Math.log10(val)));
-  const norm = val / magnitude;
-  let nextNorm;
-  if (norm <= 1) nextNorm = 1;
-  else if (norm <= 2) nextNorm = 2;
-  else if (norm <= 2.5) nextNorm = 2.5;
-  else if (norm <= 5) nextNorm = 5;
-  else nextNorm = 10;
-  return nextNorm * magnitude;
-};
-
-// Generate graph: pink line peaks at center (bell curve), gray line flat at top
-const generateOrganicGraph = (totalViews: number, seed: number, startDate: string, typicalTop?: number) => {
+// Generate a cumulative reel curve from the edited views total.
+const generateOrganicGraph = (totalViews: number, startDate: string, typicalTop?: number) => {
   // Parse start date
   const months: Record<string, number> = { Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5, Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11 };
   const parts = startDate.trim().split(" ");
@@ -50,32 +28,18 @@ const generateOrganicGraph = (totalViews: number, seed: number, startDate: strin
   const month = months[monthStr] ?? 0;
   const baseDate = new Date(2025, month, day);
 
-  const rng = seededRandom(seed + totalViews + 7);
   const numPoints = 5;
   const points: { day: string; thisReel: number; typical: number }[] = [];
   const peak = totalViews;
   const topVal = typicalTop ?? Math.round(peak * 0.55);
 
-  // Bell curve ratios for pink line with slight randomization
-  const bellBase = [0, 0.55, 1.0, 0.65, 0.15];
-  const typicalBase = [0, 0.45, 0.75, 0.9, 0.95];
-
+  // Cumulative views rise rapidly after publication, then settle, as in the reference.
+  const growth = [0, 0.86, 0.94, 0.98, 1];
   for (let i = 0; i < numPoints; i++) {
-    const dayOffset = i === 0 ? 0 : Math.round((i * 22) / (numPoints - 1));
     const date = new Date(baseDate);
-    date.setDate(date.getDate() + dayOffset);
-    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    const label = i === 0 || i === 2 || i === 4 ? `${date.getDate()} ${monthNames[date.getMonth()]}` : "";
-
-    // Add slight variation per reel (±10%)
-    const bellVar = i === 0 ? 0 : bellBase[i] * (0.9 + rng() * 0.2);
-    const typVar = i === 0 ? 0 : typicalBase[i] * (0.85 + rng() * 0.3);
-
-    points.push({
-      day: label,
-      thisReel: Math.round(peak * bellVar),
-      typical: Math.round(topVal * typVar),
-    });
+    date.setDate(date.getDate() + Math.round(i * 22 / (numPoints - 1)));
+    const label = i === 0 || i === 2 || i === 4 ? `${date.getDate()} ${monthStr}` : '';
+    points.push({ day: label, thisReel: Math.round(peak * growth[i]), typical: Math.round(topVal * growth[i]) });
   }
 
   return points;
@@ -248,7 +212,21 @@ const ReelInsightsScreen = () => {
     return null;
   });
   const [editTypicalTop, setEditTypicalTop] = useState((post as any)?.editTypicalTop ?? Math.round((ins?.views ?? 1000) * 0.55));
-  const [editGraphYMax, setEditGraphYMax] = useState<number | null>(null);
+
+  const updateViews = (next: number) => {
+    const value = Math.max(0, next);
+    setCustomGraphData(current => {
+      if (current == null) return null;
+      const scaled = fitGraphToTotal(current.map(point => point.thisReel), value);
+      return current.map((point, index) => ({ ...point, thisReel: scaled[index] }));
+    });
+    const nextTop = niceGraphTop(value);
+    setEditYTop(nextTop);
+    setEditYCenter(nextTop / 2);
+    setEditYTopLabel('');
+    setEditYCenterLabel('');
+    setEditViews(value);
+  };
 
   // Watch time editable state
   const [editWatchTime, setEditWatchTime] = useState(ins?.watchTime || "1h 3m 53s");
@@ -529,17 +507,19 @@ const ReelInsightsScreen = () => {
     if (customGraphData) {
       const lastI = customGraphData.length - 1;
       const midI = Math.floor(lastI / 2);
+      const scaled = fitGraphToTotal(customGraphData.map(point => point.thisReel), editViews);
       const labeled = customGraphData.map((d, i) => {
         const labelIdx = i === 0 ? 0 : i === midI ? 1 : i === lastI ? 2 : -1;
         return {
           ...d,
+          thisReel: scaled[i],
           day: labelIdx >= 0 ? effectiveXLabels[labelIdx] : "",
         };
       });
       return labeled;
     }
     // Auto-generate, then override labels
-    const generated = generateOrganicGraph(editViews, postIndex, editStartDate, editTypicalTop);
+    const generated = generateOrganicGraph(editViews, editStartDate, editTypicalTop);
     return generated.map((d, i) => {
       const labelIdx = i === 0 ? 0 : i === 2 ? 1 : i === 4 ? 2 : -1;
       return { ...d, day: labelIdx >= 0 ? effectiveXLabels[labelIdx] : "" };
@@ -809,12 +789,17 @@ const ReelInsightsScreen = () => {
             </button>
           ) : (
 
-            <button 
-              onClick={() => { setIsEditMode(false); saveToSupabase(); persistEdits(); toast.success("All changes saved"); }}
+            <Button variant="ghost"
+              onClick={async () => {
+                if (!await saveToSupabase()) { toast.error('Changes could not be saved. Please try again.'); return; }
+                persistEdits();
+                setIsEditMode(false);
+                toast.success('All changes saved');
+              }}
               className="text-[14px] font-bold text-[hsl(var(--ig-blue))] leading-none"
             >
               Done
-            </button>
+            </Button>
           )}
         </div>
       </header>
@@ -897,7 +882,7 @@ const ReelInsightsScreen = () => {
             </div>
             <div className="grid grid-cols-2 gap-3">
               {[
-                { label: "Views", value: fmtNum(views), onEdit: () => setEditModal({ label: "Views", value: String(views), onSave: setEditViews }) },
+                { label: "Views", value: fmtNum(views), onEdit: () => setEditModal({ label: "Views", value: String(views), onSave: updateViews }) },
                 { label: "Viewers", value: fmtNum(accountsReached), onEdit: () => setEditModal({ label: "Viewers", value: String(accountsReached), onSave: setEditAccountsReached }) },
                 { label: "Average watch time", value: avgWatchTime, onEdit: () => setEditModal({ label: "Average watch time", value: editAvgWatchTime, isText: true, onSave: ((v: any) => setEditAvgWatchTime(String(v))) as any }) },
                 { label: "Follows", value: String(follows), onEdit: () => setEditModal({ label: "Follows", value: String(follows), onSave: setEditFollows }) },
@@ -952,96 +937,25 @@ const ReelInsightsScreen = () => {
                 <img src={viewsGraphImageUrl} alt="Views over time" className="w-full h-auto object-contain rounded-lg" />
               ) : (
               <>
-              {/* Keep a dedicated tap target above Recharts. Its SVG touch
-                  handlers can otherwise swallow taps on some mobile WebViews. */}
-              <div
-                data-no-longpress
-                className="h-[180px] -ml-2 relative [&_.recharts-wrapper]:pointer-events-none"
-              >
-                <button
-                  type="button"
-                  aria-label="Customize views over time graph"
-                  className="absolute inset-0 z-10 cursor-pointer touch-manipulation bg-transparent active:bg-secondary/10"
-                  onClick={() => {
-                    setIsEditMode(true);
-                    setGraphEditorOpen(true);
-                  }}
-                />
-
-                {(() => {
-                  // Remap data values onto a fixed visual scale [0..2] so the 3 gridlines
-                  // (bottom=0, middle=1, top=2) are ALWAYS evenly spaced regardless of
-                  // the actual numeric values entered for middle/top labels.
-                  const topVal = Math.max(1, editYTop);
-                  const midVal = Math.min(Math.max(0, editYCenter), topVal);
-                  const remap = (v: number) => {
-                    if (v <= 0) return 0;
-                    if (v <= midVal) return midVal === 0 ? 0 : (v / midVal); // 0..1
-                    if (v >= topVal) return 2;
-                    return 1 + (v - midVal) / (topVal - midVal); // 1..2
-                  };
-                  const visualData = viewsOverTime.map(d => ({
-                    ...d,
-                    thisReel: d.thisReel == null ? null : remap(d.thisReel),
-                    typical: d.typical == null ? null : remap(d.typical),
-                  }));
-                  const fmt = (v: number) => v === 0 ? '0' : Math.round(v).toLocaleString('en-US');
-                  const tickLabel = (v: number) => v === 0 ? fmt(0)
-                    : v === 1 ? (editYCenterLabel?.trim() ? editYCenterLabel : fmt(midVal))
-                    : (editYTopLabel?.trim() ? editYTopLabel : fmt(topVal));
-                  return (
-                    <ResponsiveContainer width="100%" height="100%">
-                       <LineChart data={visualData} margin={{ top: 14, right: 26, left: 0, bottom: 0 }}>
-                        <XAxis
-                          dataKey="day"
-                          fontSize={11}
-                          tickLine={false}
-                          axisLine={false}
-                          interval={0}
-                          padding={{ left: 2, right: 2 }}
-                          tick={{ fill: 'hsl(var(--muted-foreground))' }}
-                        />
-                        <YAxis
-                          fontSize={11}
-                          tickLine={false}
-                          axisLine={false}
-                          width={42}
-                          domain={[0, 2]}
-                          ticks={[0, 1, 2]}
-                          interval={0}
-                          tickFormatter={tickLabel}
-                          tick={{ fill: 'hsl(var(--muted-foreground))' }}
-                        />
-                        {/* Always 3 evenly-spaced gridlines: bottom, middle, top */}
-                        <ReferenceLine y={0} stroke="hsl(var(--border))" strokeOpacity={0.5} />
-                        <ReferenceLine y={1} stroke="hsl(var(--border))" strokeOpacity={0.5} />
-                        <ReferenceLine y={2} stroke="hsl(var(--border))" strokeOpacity={0.5} />
-                        <Line type="monotone" dataKey="typical" stroke="hsl(var(--muted-foreground))" strokeWidth={2.5} strokeDasharray="6 6" dot={false} />
-                        <Line type="monotone" dataKey="thisReel" stroke="#E040FB" strokeWidth={3} dot={false} />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  );
-                })()}
-                {isEditMode && (
-                  <>
-                    <button
-                       onClick={(e) => { e.stopPropagation(); setEditModal({ label: "Y-axis Top value", value: editYTopLabel || String(editYTop), onSave: (v, raw) => { setEditYTop(Math.max(1, v)); setEditYTopLabel(raw ?? ""); } }); }}
-                      className="absolute z-20 left-0 top-[6px] w-[42px] h-[26px] bg-[hsl(var(--ig-blue))]/15 rounded"
-                      aria-label="Edit top Y value"
-                    />
-                    <button
-                       onClick={(e) => { e.stopPropagation(); setEditModal({ label: "Y-axis Middle value", value: editYCenterLabel || String(editYCenter), onSave: (v, raw) => { setEditYCenter(Math.max(0, v)); setEditYCenterLabel(raw ?? ""); } }); }}
-                      className="absolute z-20 left-0 top-1/2 -translate-y-1/2 w-[42px] h-[26px] bg-[hsl(var(--ig-blue))]/15 rounded"
-                      aria-label="Edit middle Y value"
-                    />
-                  </>
-                )}
-              </div>
+              <InsightScrubChart
+                label="views over time" height={150}
+                points={viewsOverTime.map(point => ({ label: point.day, value: point.thisReel, typical: point.typical }))}
+                editing={isEditMode}
+                onEdit={() => setGraphEditorOpen(true)}
+                axisLabels={isEditMode && viewsFilter === 'All' ? [editYTopLabel || String(editYTop), editYCenterLabel || String(editYCenter), '0'] : undefined}
+                onAxisChange={(index, raw) => {
+                  const value = Number(raw.replace(/,/g, '').replace(/[KMB]/gi, '')) * (/M$/i.test(raw) ? 1e6 : /K$/i.test(raw) ? 1e3 : /B$/i.test(raw) ? 1e9 : 1);
+                  if (index === 0) { setEditYTop(Math.max(1, value || 1)); setEditYTopLabel(raw); }
+                  if (index === 1) { setEditYCenter(Math.max(0, value || 0)); setEditYCenterLabel(raw); }
+                }}
+                top={viewsFilter === 'All' ? editYTop : undefined}
+                middle={viewsFilter === 'All' ? editYCenter : undefined}
+              />
 
               {/* Legend */}
               <div className="flex items-center gap-5 mt-2 px-1">
                 <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-[#E040FB]" />
+                  <span className="w-2 h-2 rounded-full insight-graph-swatch" />
                   <span className="text-[12px] text-foreground">This reel</span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -1161,37 +1075,15 @@ const ReelInsightsScreen = () => {
               {retentionImageUrl ? (
                 <img src={retentionImageUrl} alt="Retention graph" className="w-full h-auto object-contain rounded-lg" />
               ) : (
-                <div data-no-longpress className="h-[124px] relative [&_.recharts-wrapper]:pointer-events-none">
-                  <button
-                    type="button"
-                    aria-label="Customize retention graph"
-                    className="absolute inset-0 z-10 cursor-pointer touch-manipulation bg-transparent active:bg-secondary/10"
-                    onClick={() => { setIsEditMode(true); setRetentionEditorMode("retention"); setRetentionEditorOpen(true); }}
-                  />
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={editRetentionCurve} margin={{ top: 5, right: 5, left: -5, bottom: 0 }}>
-                      <CartesianGrid horizontal={true} vertical={false} stroke="hsl(var(--border))" strokeOpacity={0.3} />
-                      <XAxis dataKey="t" fontSize={10} tickLine={false} axisLine={false} tick={{ fill: 'hsl(var(--muted-foreground))' }} />
-                      <YAxis fontSize={10} tickLine={false} axisLine={false} width={46} domain={[0, editRetentionYTop]} ticks={[0, editRetentionYCenter, editRetentionYTop]} tickFormatter={(v: number) => v === 0 ? '0' : `${v}%`} tick={{ fill: 'hsl(var(--muted-foreground))' }} />
-                      <Line type="linear" dataKey="pct" stroke="#E040FB" strokeWidth={5} dot={false} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                  {(
-
-                    <>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setIsEditMode(true); setEditModal({ label: "Graph top %", value: String(editRetentionYTop), onSave: (v) => setEditRetentionYTop(Math.max(1, v)) }); }}
-                        className={cn("absolute left-0 top-0 w-[46px] h-[24px] rounded z-20", isEditMode ? "bg-primary/15" : "bg-transparent")}
-                        aria-label="Edit retention top percentage"
-                      />
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setIsEditMode(true); setEditModal({ label: "Graph middle %", value: String(editRetentionYCenter), onSave: (v) => setEditRetentionYCenter(Math.max(0, v)) }); }}
-                        className={cn("absolute left-0 top-[38px] w-[46px] h-[24px] rounded z-20", isEditMode ? "bg-primary/15" : "bg-transparent")}
-                        aria-label="Edit retention middle percentage"
-                      />
-                    </>
-                  )}
-                </div>
+                <InsightScrubChart label="retention graph" height={116} percentage
+                  points={editRetentionCurve.map(point => ({ label: point.t, value: point.pct }))}
+                  top={editRetentionYTop} middle={editRetentionYCenter} editing={isEditMode}
+                  onEdit={() => { setRetentionEditorMode('retention'); setRetentionEditorOpen(true); }}
+                  onAxisChange={(index, raw) => {
+                    const value = Math.max(0, Number(raw.replace('%', '')) || 0);
+                    if (index === 0) setEditRetentionYTop(Math.max(1, value));
+                    if (index === 1) setEditRetentionYCenter(value);
+                  }} />
               )}
             </div>
             <div className="flex items-center gap-3 mt-2 justify-end">
@@ -1449,60 +1341,16 @@ const ReelInsightsScreen = () => {
             </div>
 
             <div className="relative select-none -mx-2">
-              <div
-                data-no-longpress
-                className="h-[180px] relative [&_.recharts-wrapper]:pointer-events-none"
-              >
-                <button
-                  type="button"
-                  aria-label="Customize engagement graph"
-                  className="absolute inset-0 z-10 cursor-pointer touch-manipulation bg-transparent active:bg-secondary/10"
-                  onClick={() => { setIsEditMode(true); setRetentionEditorMode("engagement"); setRetentionEditorOpen(true); }}
-                />
+              <InsightScrubChart label="engagement graph" height={150} percentage
+                points={editEngagementCurve.map(point => ({ label: point.t, value: point.pct }))}
+                top={editEngagementYTop} middle={editEngagementYCenter} editing={isEditMode}
+                onEdit={() => { setRetentionEditorMode('engagement'); setRetentionEditorOpen(true); }}
+                onAxisChange={(index, raw) => {
+                  const value = Math.max(0, Number(raw.replace('%', '')) || 0);
+                  if (index === 0) setEditEngagementYTop(Math.max(1, value));
+                  if (index === 1) setEditEngagementYCenter(value);
+                }} />
 
-
-                {(() => {
-                  const topVal = Math.max(1, editEngagementYTop);
-                  const midVal = Math.min(Math.max(0, editEngagementYCenter), topVal);
-                  const remapPct = (v: number) => {
-                    const clamped = Math.max(0, Math.min(topVal, v));
-                    if (clamped <= midVal) return midVal === 0 ? 0 : clamped / midVal;
-                    return 1 + (clamped - midVal) / (topVal - midVal || 1);
-                  };
-                  const engagementGraphData = editEngagementCurve.map((d) => ({ ...d, pct: d.pct == null ? null : remapPct(d.pct) }));
-                  return (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={engagementGraphData} margin={{ top: 5, right: 5, left: -5, bottom: 0 }}>
-                        <XAxis dataKey="t" fontSize={10} tickLine={false} axisLine={false} tick={{ fill: 'hsl(var(--muted-foreground))' }} />
-                        <YAxis fontSize={10} tickLine={false} axisLine={false} width={46} domain={[0, 2]} ticks={[0, 1, 2]} tickFormatter={(v: number) => v === 0 ? '0%' : `${v === 1 ? midVal : topVal}%`} tick={{ fill: 'hsl(var(--muted-foreground))' }} />
-                        <ReferenceLine y={0} stroke="hsl(var(--border))" strokeOpacity={0.3} />
-                        <ReferenceLine y={1} stroke="hsl(var(--border))" strokeOpacity={0.3} />
-                        <ReferenceLine y={2} stroke="hsl(var(--border))" strokeOpacity={0.3} />
-                        <Line type="linear" dataKey="pct" stroke="#E040FB" strokeWidth={3} dot={false} />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  );
-                })()}
-                {(
-
-                  <>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      onClick={(e) => { e.stopPropagation(); setIsEditMode(true); setEditModal({ label: "Engagement graph top %", value: String(editEngagementYTop), onSave: (v) => setEditEngagementYTop(Math.max(1, v)) }); }}
-                      className={cn("absolute left-0 top-0 z-20 w-[46px] h-[24px] p-0 rounded", isEditMode ? "bg-primary/15" : "bg-transparent")}
-                      aria-label="Edit engagement top percentage"
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      onClick={(e) => { e.stopPropagation(); setIsEditMode(true); setEditModal({ label: "Engagement graph middle %", value: String(editEngagementYCenter), onSave: (v) => setEditEngagementYCenter(Math.max(0, v)) }); }}
-                      className={cn("absolute left-0 top-[66px] z-20 w-[46px] h-[24px] p-0 rounded", isEditMode ? "bg-primary/15" : "bg-transparent")}
-                      aria-label="Edit engagement middle percentage"
-                    />
-                  </>
-                )}
-              </div>
             </div>
           </div>
         </div>
@@ -1774,8 +1622,8 @@ const ReelInsightsScreen = () => {
         onDatesChange={(nd) => { xDatesManuallyEdited.current = true; setEditXDate1(nd[0]); setEditXDate2(nd[1]); setEditXDate3(nd[2]); }}
         controlledDates={[editXDate1, editXDate2, editXDate3]}
         initialData={viewsOverTimeAll}
-        maxViews={editYTop}
-        midViews={editYCenter}
+        maxViews={Math.max(editYTop, niceGraphTop(Math.max(0, ...viewsOverTimeAll.map(point => point.thisReel ?? 0))))}
+        midViews={Math.max(editYTop, niceGraphTop(Math.max(0, ...viewsOverTimeAll.map(point => point.thisReel ?? 0)))) / 2}
       />
 
       <RetentionEditorModal

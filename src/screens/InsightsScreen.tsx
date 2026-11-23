@@ -10,6 +10,8 @@ import ContentListSkeleton from "@/components/ContentListSkeleton";
 import OverviewSkeleton from "@/components/OverviewSkeleton";
 import AudienceSkeleton from "@/components/AudienceSkeleton";
 import GraphEditorModal from "@/components/GraphEditorModal";
+import InsightScrubChart from "@/components/InsightScrubChart";
+import { niceGraphTop, scaleGraphValues } from "@/lib/insightGraph";
 import VideoThumbnail from "@/components/VideoThumbnail";
 
 import DecimalInput from "@/components/DecimalInput";
@@ -312,161 +314,6 @@ const parseAxisLabel = (value?: string) => {
   return n;
 };
 
-const LineChart = ({
-  points,
-  maxOverride,
-  editing,
-  topLabel,
-  midLabel,
-  bottomLabel,
-  onLabelChange,
-  onChartClick,
-}: {
-  points: (number | null)[];
-  maxOverride?: number;
-  editing?: boolean;
-  topLabel?: string;
-  midLabel?: string;
-  bottomLabel?: string;
-  onLabelChange?: (key: "top" | "mid" | "bottom", value: string) => void;
-  onChartClick?: () => void;
-}) => {
-  const w = 320;
-  const h = 150;
-  const parseLabel = parseAxisLabel;
-  const labelMax = parseLabel(topLabel);
-  const max = Math.max(
-    1,
-    labelMax && labelMax > 0 ? labelMax : maxOverride && maxOverride > 0 ? maxOverride : Math.max(1, ...points.filter((point): point is number => point != null))
-  );
-
-  const step = points.length > 1 ? w / (points.length - 1) : w;
-  let startsSegment = true;
-  const d = points
-    .map((p, i) => {
-      if (p == null) {
-        startsSegment = true;
-        return "";
-      }
-      const command = startsSegment ? "M" : "L";
-      startsSegment = false;
-      return `${command}${(i * step).toFixed(1)},${(h - (Math.min(p, max) / max) * (h - 10)).toFixed(1)}`;
-    })
-    .filter(Boolean)
-    .join(" ");
-  const shown: Record<"top" | "mid" | "bottom", string> = {
-    top: topLabel ?? formatCompactMetric(max),
-    mid: midLabel ?? formatCompactMetric(max / 2),
-    bottom: bottomLabel ?? formatCompactMetric(0),
-  };
-  return (
-    <div className="grid min-w-0 grid-cols-[2.5rem_minmax(0,1fr)] gap-2">
-      <div className="flex flex-col justify-between h-[150px] py-[2px] w-10 shrink-0 text-right">
-        {(["top", "mid", "bottom"] as const).map((key) =>
-          editing ? (
-            <input
-              key={key}
-              className="w-10 bg-secondary rounded text-right text-[10px] outline-none text-foreground px-1"
-              value={shown[key]}
-              onChange={(e) => onLabelChange?.(key, e.target.value)}
-            />
-          ) : (
-            <span key={key} className="text-[10px] text-muted-foreground leading-none">
-              {shown[key]}
-            </span>
-          )
-        )}
-      </div>
-      <div className="relative min-w-0 h-[150px]">
-        <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="block w-full min-w-0 h-[150px]">
-          {[10, (h + 10) / 2, h].map((y, i) => (
-            <line key={i} x1="0" x2={w} y1={y} y2={y} stroke="hsl(var(--border))" strokeWidth="0.6" />
-          ))}
-          <path d={d} fill="none" stroke={PINK} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
-        </svg>
-        {onChartClick && (
-          <button
-            type="button"
-            aria-label="Edit graph"
-            onClick={onChartClick}
-            className="absolute inset-0 z-10 touch-manipulation"
-          />
-        )}
-      </div>
-    </div>
-  );
-};
-
-
-const AudienceLineChart = ({
-  points,
-  topLabel,
-  midLabel,
-  bottomLabel,
-  editing,
-  onLabelChange,
-}: {
-  points: (number | null)[];
-  topLabel: string;
-  midLabel: string;
-  bottomLabel: string;
-  editing?: boolean;
-  onLabelChange?: (key: "top" | "mid" | "bottom", value: string) => void;
-}) => {
-  const width = 320;
-  const height = 116;
-  const top = 10;
-  const bottom = 106;
-  const parse = (value: string, fallback: number) => {
-    const n = Number(String(value).replace(/[^\d.-]/g, ""));
-    return Number.isFinite(n) && String(value).trim() !== "" ? n : fallback;
-  };
-  const topValue = parse(topLabel, 12);
-  const bottomValue = parse(bottomLabel, -12);
-  const numericPoints = points.filter((point): point is number => point != null);
-  const min = Math.min(bottomValue, ...numericPoints);
-  const max = Math.max(topValue, ...numericPoints);
-  const range = Math.max(1, max - min);
-  const step = points.length > 1 ? width / (points.length - 1) : width;
-  const y = (value: number) => top + ((max - value) / range) * (bottom - top);
-  let startsSegment = true;
-  const path = points.map((point, index) => {
-    if (point == null) {
-      startsSegment = true;
-      return "";
-    }
-    const command = startsSegment ? "M" : "L";
-    startsSegment = false;
-    return `${command}${index * step},${y(point)}`;
-  }).filter(Boolean).join(" ");
-
-  return (
-    <div className="grid min-w-0 grid-cols-[2.5rem_minmax(0,1fr)] gap-3">
-      <div className="h-[116px] w-10 shrink-0 flex flex-col justify-between py-[2px] text-right text-[11px] text-muted-foreground">
-        {(["top", "mid", "bottom"] as const).map((key) => {
-          const value = key === "top" ? topLabel : key === "mid" ? midLabel : bottomLabel;
-          return editing ? (
-            <input
-              key={key}
-              className="w-10 bg-secondary rounded text-right text-[11px] outline-none text-foreground px-1"
-              value={value}
-              onChange={(e) => onLabelChange?.(key, e.target.value)}
-            />
-          ) : (
-            <span key={key}>{value}</span>
-          );
-        })}
-      </div>
-      <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="block h-[116px] w-full min-w-0 overflow-visible">
-        {[top, y(0), bottom].map((lineY) => (
-          <line key={lineY} x1="0" x2={width} y1={lineY} y2={lineY} stroke="hsl(var(--border))" strokeWidth="0.6" />
-        ))}
-        <path d={path} fill="none" stroke={PINK} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-      </svg>
-    </div>
-  );
-};
-
 const AudienceInfoTitle = ({ children }: { children: ReactNode }) => (
   <div className="flex items-center gap-2">
     <h2 className="text-[16px] font-bold">{children}</h2>
@@ -592,7 +439,16 @@ const InsightsScreen = () => {
   }, [usernameVersion]);
 
   const update = <K extends keyof InsightsData>(key: K, value: InsightsData[K]) =>
-    setData((prev) => ({ ...prev, [key]: value }));
+    setData((prev) => {
+      if (key === 'views') {
+        const previous = parseAxisLabel(prev.views) ?? 0;
+        const next = Math.max(0, parseAxisLabel(String(value)) ?? 0);
+        const graph = scaleGraphValues(prev.graph, previous, next);
+        const top = niceGraphTop(Math.max(0, ...graph.map(point => point ?? 0)));
+        return { ...prev, [key]: value, graph, graphMax: top, graphTopLabel: formatCompactMetric(top), graphMidLabel: formatCompactMetric(top / 2), graphBottomLabel: '0' };
+      }
+      return { ...prev, [key]: value };
+    });
 
   const saveChanges = () => {
     if (!persistInsights(latestDataRef.current)) {
@@ -921,21 +777,12 @@ const InsightsScreen = () => {
 
           {/* Chart */}
           <div className="px-4 pt-4">
-            <LineChart
-              points={data.graph}
-              maxOverride={data.graphMax}
-              editing={isEditing}
-              topLabel={data.graphTopLabel}
-              midLabel={data.graphMidLabel}
-              bottomLabel={data.graphBottomLabel}
-              onLabelChange={(key, value) =>
-                update(
-                  key === "top" ? "graphTopLabel" : key === "mid" ? "graphMidLabel" : "graphBottomLabel",
-                  value
-                )
-              }
-              onChartClick={() => setIsOverviewGraphEditorOpen(true)}
-            />
+            <InsightScrubChart label="overview graph" height={150} showDates={false}
+              points={data.graph.map((value, index) => ({ value, label: index === 0 ? data.graphStart : index === Math.floor((data.graph.length - 1) / 2) ? data.graphMid : index === data.graph.length - 1 ? data.graphEnd : '' }))}
+              top={overviewAxisMax} middle={overviewAxisMid} editing={isEditing}
+              axisLabels={[data.graphTopLabel ?? formatCompactMetric(overviewAxisMax), data.graphMidLabel ?? formatCompactMetric(overviewAxisMid), data.graphBottomLabel ?? '0']}
+              onAxisChange={(index, value) => update(index === 0 ? 'graphTopLabel' : index === 1 ? 'graphMidLabel' : 'graphBottomLabel', value)}
+              onEdit={() => setIsOverviewGraphEditorOpen(true)} />
             <div className="flex justify-between pl-12 pt-2 pb-5">
               {(["graphStart", "graphMid", "graphEnd"] as const).map((k) =>
                 isEditing ? (
@@ -1216,28 +1063,12 @@ const InsightsScreen = () => {
             <div className="flex flex-wrap gap-2.5 mb-12">
               {["Overall", "Follows", "Unfollows"].map((item) => <button key={item} onClick={() => setAudienceGrowthTab(item)} className={cn("h-[42px] px-5 rounded-full border text-[12px] font-semibold", audienceGrowthTab === item ? "bg-secondary border-transparent" : "border-border")}>{item}</button>)}
             </div>
-            <div
-              className={isEditing ? "cursor-pointer" : ""}
-              onClick={(e) => {
-                if (!isEditing) return;
-                if (e.target instanceof HTMLInputElement) return;
-                setIsFollowerGraphEditorOpen(true);
-              }}
-            >
-              <AudienceLineChart
-                points={data.followerGraph}
-                topLabel={data.followerGraphTopLabel ?? "12"}
-                midLabel={data.followerGraphMidLabel ?? "0"}
-                bottomLabel={data.followerGraphBottomLabel ?? "-12"}
-                editing={isEditing}
-                onLabelChange={(key, value) =>
-                  update(
-                    key === "top" ? "followerGraphTopLabel" : key === "mid" ? "followerGraphMidLabel" : "followerGraphBottomLabel",
-                    value
-                  )
-                }
-              />
-            </div>
+            <InsightScrubChart label="audience growth graph" height={116} showDates={false}
+              points={data.followerGraph.map((value, index) => ({ value, label: index === 0 ? data.followerGraphStart : index === Math.floor((data.followerGraph.length - 1) / 2) ? data.followerGraphMid : index === data.followerGraph.length - 1 ? data.followerGraphEnd : '' }))}
+              top={followerAxisMax} middle={0} bottom={-followerAxisMax} editing={isEditing}
+              axisLabels={[data.followerGraphTopLabel ?? '12', data.followerGraphMidLabel ?? '0', data.followerGraphBottomLabel ?? '-12']}
+              onAxisChange={(index, value) => update(index === 0 ? 'followerGraphTopLabel' : index === 1 ? 'followerGraphMidLabel' : 'followerGraphBottomLabel', value)}
+              onEdit={() => setIsFollowerGraphEditorOpen(true)} />
             <div className="grid grid-cols-3 gap-1 pl-[52px] pt-2 text-[12px] text-muted-foreground">
               {(["followerGraphStart", "followerGraphMid", "followerGraphEnd"] as const).map((key, index) => isEditing ? <input key={key} className="w-full min-w-0 bg-secondary rounded text-center outline-none" value={data[key]} onChange={(e) => update(key, e.target.value)} /> : <span key={key} className={cn("min-w-0 break-words", index === 1 && "text-center", index === 2 && "text-right")}>{data[key]}</span>)}
             </div>

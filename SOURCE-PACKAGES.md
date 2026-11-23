@@ -12,8 +12,10 @@ must not register that bot a second time.
 
 TikTok contains the separate `smmdigitalfame-cmyk/finalproject` source, its own
 key issuer, Telegram administration handlers, migrations and integration guide.
-It is not the unrelated TikTok Video Lister project. VPS compiled files are kept
-by the existing VPS backups; they are not substituted for editable source here.
+It is not the unrelated TikTok Video Lister project. Each ZIP also includes the
+latest credential-free VPS files under `VPS-DEPLOYED/`; compiled files are never
+substituted for editable repository source. Instagram reads `/var/www/insights`,
+TikTok reads `/opt/tiktokapp`. Private settings and customer data are excluded.
 
 ## AI deployment instruction
 
@@ -28,9 +30,13 @@ product's APK/key delivery. Report anything not verified.
 
 ## Refresh
 
-The VPS package-only job polls the Instagram repository's `drive-source-backup`
-branch and the TikTok repository's `main` branch every five minutes and
-uploads changed packages plus a daily snapshot. It does not deploy or restart apps.
+The VPS package-only job checks Instagram `main` and `drive-source-backup` (newest
+commit date wins), TikTok `main`, and hashes both VPS app directories every five
+minutes. A source revision or deployed-file hash change rebuilds the relevant ZIP
+and replaces the same Drive `latest-code` file. Only the two product ZIPs are kept;
+no dated copies or combined archives are created. It does not
+deploy or restart apps. Drive updates follow the next successful check/upload;
+network errors are logged in `/root/backups/source-packages/refresh.log`.
 This project's GitHub workflow transfers the current checkout on a main-branch push
 to the same private package staging directory on the VPS, then refreshes Drive.
 GitHub-to-VPS automation requires repository secrets `VPS_USER` and `VPS_PASSWORD`
@@ -39,10 +45,13 @@ The Instagram backup branch preserves the current editor without triggering the
 old repository's production deployments. Future main-branch updates in this
 connected project transfer directly through the backup workflow when its secure
 repository settings are configured; the old production main branch is unchanged.
-Updates not committed/synced to these sources are not automatically captured.
+Uncommitted changes outside the monitored VPS directories are not captured.
+Lovable changes still must reach a monitored repository or the configured backup
+workflow; this job cannot read unpublished editor changes.
 On a new server, provision rclone's `gdrive` remote privately; a ZIP does not include it.
 
-Existing VPS backup jobs are retained. New source snapshots have separate 14-day
-retention under `deployment-packages/history`; `latest-code` is never purged.
+The old combined daily archive schedule is disabled at the owner's request.
+Its script/settings remain backed up locally; old Drive duplicates go to Trash.
+The remaining five-minute job updates only the two product ZIPs.
 The current migrations do not bootstrap a complete new Instagram database:
 restore the authoritative private schema/data/storage first, or retain that backend.

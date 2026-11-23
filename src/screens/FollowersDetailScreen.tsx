@@ -9,6 +9,7 @@ import { useActiveUsernameVersion } from "@/hooks/useActiveUsernameVersion";
 import { getPersistentItem, getPersistentJson, getPersistentScope, setPersistentJson } from "@/lib/persistentStorage";
 import InsightDetailSkeleton from "@/components/InsightDetailSkeleton";
 import DecimalInput from "@/components/DecimalInput";
+import InsightScrubChart from "@/components/InsightScrubChart";
 
 interface FollowersData {
   totalFollowers: string;
@@ -265,50 +266,18 @@ const FollowersDetailScreen = () => {
 
           {/* Line Chart */}
           <div className="relative h-[180px] w-full mt-2 mb-4">
-            <div className="absolute left-0 top-0 bottom-0 flex flex-col justify-between text-[12px] text-muted-foreground">
-              {isEditing ? (
-                <>
-                  <input className="w-8 bg-secondary/50 rounded text-center outline-none text-foreground" value={data.chartAxis.max} onChange={e => updateField('chartAxis', {...data.chartAxis, max: e.target.value})} />
-                  <input className="w-8 bg-secondary/50 rounded text-center outline-none text-foreground" value={data.chartAxis.mid} onChange={e => updateField('chartAxis', {...data.chartAxis, mid: e.target.value})} />
-                  <input className="w-8 bg-secondary/50 rounded text-center outline-none text-foreground" value={data.chartAxis.min} onChange={e => updateField('chartAxis', {...data.chartAxis, min: e.target.value})} />
-                </>
-              ) : (
-                <>
-                  <span>{data.chartAxis.max}</span>
-                  <span>{data.chartAxis.mid}</span>
-                  <span>{data.chartAxis.min}</span>
-                </>
-              )}
-            </div>
-            <div className="absolute left-10 right-0 top-0 bottom-0">
-              <div className="absolute top-0 w-full h-[0.5px] bg-border/50" />
-              <div className="absolute top-1/2 w-full h-[0.5px] bg-border/50" />
-              <div className="absolute bottom-0 w-full h-[0.5px] bg-border/50" />
-              
-              <svg viewBox="0 0 540 150" className="w-full h-full overflow-visible">
-                <path 
-                  d={`M0,${data.chartData[0]} ${data.chartData.slice(1).map((y, i) => `L${(i+1)*40},${y}`).join(' ')}`} 
-                  fill="none" stroke="#D946EF" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" 
-                />
-              </svg>
-
-              {isEditing && (
-                <div className="absolute inset-0 flex justify-between items-center pointer-events-none">
-                  {data.chartData.map((y, i) => (
-                    <div key={i} className="relative flex flex-col items-center pointer-events-auto h-full justify-end">
-                      <input 
-                        type="range" min="0" max="150" 
-                        className="h-full appearance-none bg-transparent opacity-0 cursor-pointer w-4 hover:opacity-10" 
-                        value={y} 
-                        onChange={e => {
-                          const n = [...data.chartData]; n[i] = parseInt(e.target.value); updateField('chartData', n);
-                        }} 
-                      />
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+            <InsightScrubChart label="follower details graph" height={150} showDates={false}
+              top={Number(data.chartAxis.max) || 19} middle={Number(data.chartAxis.mid) || 0} bottom={Number(data.chartAxis.min) || -19}
+              axisLabels={[data.chartAxis.max, data.chartAxis.mid, data.chartAxis.min]} editing={isEditing}
+              onAxisChange={(index, value) => updateField('chartAxis', { ...data.chartAxis, [index === 0 ? 'max' : index === 1 ? 'mid' : 'min']: value })}
+              points={data.chartData.map((pixel, index) => ({
+                // Legacy follower curves store SVG y-coordinates, not counts.
+                value: (Number(data.chartAxis.max) || 19) - pixel / 150 * ((Number(data.chartAxis.max) || 19) - (Number(data.chartAxis.min) || -19)),
+                label: index === 0 ? data.chartDates[0] : index === Math.floor((data.chartData.length - 1) / 2) ? data.chartDates[1] : index === data.chartData.length - 1 ? data.chartDates[2] : '',
+              }))} />
+            {isEditing && <div className="mt-2 flex min-w-0 gap-1">
+              {data.chartData.map((value, index) => <input key={index} aria-label={`Follower graph point ${index + 1}`} type="range" min="0" max="150" className="min-w-0 flex-1" value={value} onChange={event => { const points = [...data.chartData]; points[index] = Number(event.target.value); updateField('chartData', points); }} />)}
+            </div>}
             <div className="absolute left-10 right-0 bottom-[-24px] flex justify-between text-[11px] text-muted-foreground">
               {isEditing ? (data.chartDates || ["8 Mar", "21 Mar", "4 Apr"]).map((d, i) => (
                 <input key={i} className="w-14 bg-secondary/50 rounded text-center text-[11px] outline-none text-muted-foreground" value={d} onChange={e => {
