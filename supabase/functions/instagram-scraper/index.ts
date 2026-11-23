@@ -15,6 +15,7 @@
 //   → { username, profile, reels[], posts[], highlights[] }
 // ---------------------------------------------------------------------------
 
+import { boundedEnrichment } from "../_shared/bounded-enrichment.ts";
 import { parseProfileHtml, profileCounts } from "./profileCounts.ts";
 import { unavailableResult } from "./resultStatus.ts";
 import { zylaPagination, zylaMedia } from "./zylaPagination.ts";
@@ -58,124 +59,31 @@ const maskKey = (k: string) =>
   !k ? "" : k.length <= 8 ? k[0] + "•••" + k.slice(-1) : `${k.slice(0, 4)}••••${k.slice(-4)}`;
 
 // ---- access-key gate -------------------------------------------------------
-const KEY_CACHE = new Map<string, { ok: boolean; at: number; label?: string }>();
-
-// Keys created by the bot live on the primary key server; fall back to it when
-// the local lookup rejects, so every app URL accepts the same keys.
+const KEY_CACHE = new Map<string, { at: number; expiresAt: number; label: string }>();
 const PRIMARY_KEY_SERVER = "https://xkgjifugwislpbczoduy.supabase.co/functions/v1/";
-const PRIMARY_OK = new Map<string, number>();
 
-async function validateAccessKey(
-  key: string,
-  fp: string,
-): Promise<{ ok: boolean; reason?: string; label?: string; keyMasked?: string }> {
-  const local = await validateAccessKeyLocal(key, fp);
-  if (local.ok || !key || !fp) return local;
-  if (SUPABASE_URL_ENV?.includes("xkgjifugwislpbczoduy")) return local;
-  const cacheKey = `${key}::${fp}`;
-  const okAt = PRIMARY_OK.get(cacheKey);
-  if (okAt && Date.now() - okAt < 5 * 60_000) return { ok: true, label: "User", keyMasked: maskKey(key) };
-  try {
-    const r = await fetch(PRIMARY_KEY_SERVER + "check-key-status", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ key, deviceFingerprint: fp }),
-      signal: AbortSignal.timeout(8000),
-    });
-    const d = await r.json().catch(() => ({}));
-    if (r.ok && d?.valid !== false) {
-      PRIMARY_OK.set(cacheKey, Date.now());
-      return { ok: true, label: "User", keyMasked: maskKey(key) };
-    }
-    const code = String(d?.code || "");
-    if (["invalid_key", "deactivated", "expired"].includes(code)) return { ok: false, reason: code };
-  } catch (_) { /* keep local result */ }
-  return local;
-}
-
-async function validateAccessKeyLocal(
-  key: string,
-  fp: string,
-): Promise<{ ok: boolean; reason?: string; label?: string; keyMasked?: string }> {
+async function validateAccessKey(key: string, fp: string): Promise<{ ok: boolean; reason?: string; label?: string; keyMasked?: string }> {
   if (!key || !fp) return { ok: false, reason: "missing_credentials" };
-  if (!SUPABASE_URL_ENV || !SUPABASE_SRK) return { ok: false, reason: "server_misconfig" };
-
   const cacheKey = `${key}::${fp}`;
   const cached = KEY_CACHE.get(cacheKey);
-  if (cached && Date.now() - cached.at < KEY_CACHE_TTL_MS) {
-    return cached.ok
-      ? { ok: true, label: cached.label, keyMasked: maskKey(key) }
-      : { ok: false, reason: "cached_reject" };
+  if (cached && Date.now() - cached.at < KEY_CACHE_TTL_MS && cached.expiresAt > Date.now()) {
+    return { ok: true, label: cached.label, keyMasked: maskKey(key) };
   }
-
   try {
-    const url =
-      `${SUPABASE_URL_ENV}/rest/v1/access_keys?key=eq.${encodeURIComponent(key)}` +
-      `&select=active,expires_at,device_fingerprints,max_devices,label&limit=1`;
-    const r = await fetch(url, {
-      headers: {
-        apikey: SUPABASE_SRK,
-        Authorization: `Bearer ${SUPABASE_SRK}`,
-        Accept: "application/json",
-      },
-      signal: AbortSignal.timeout(3000),
+    // Same atomic validator as login; never grant a slot by best-effort PATCH.
+    const r = await fetch(PRIMARY_KEY_SERVER + "check-key-status", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key, deviceFingerprint: fp }), signal: AbortSignal.timeout(10000),
     });
-    if (!r.ok) return { ok: false, reason: "lookup_failed" };
-    const rows = (await r.json()) as Array<{
-      active: boolean;
-      expires_at: string | null;
-      device_fingerprints: string[] | null;
-      max_devices: number | null;
-      label: string | null;
-    }>;
-    const row = rows?.[0];
-    if (!row) {
-      KEY_CACHE.set(cacheKey, { ok: false, at: Date.now() });
-      return { ok: false, reason: "invalid_key" };
+    const d = await r.json().catch(() => ({}));
+    if (r.ok && d.valid === true) {
+      const label = d.label || "User";
+      KEY_CACHE.set(cacheKey, { at: Date.now(), expiresAt: d.expires_at ? Date.parse(d.expires_at) : Infinity, label });
+      if (KEY_CACHE.size > 1000) { const oldest = KEY_CACHE.keys().next().value; if (oldest) KEY_CACHE.delete(oldest); }
+      return { ok: true, label, keyMasked: maskKey(key) };
     }
-    if (!row.active) {
-      KEY_CACHE.set(cacheKey, { ok: false, at: Date.now() });
-      return { ok: false, reason: "deactivated" };
-    }
-    if (row.expires_at && new Date(row.expires_at) < new Date()) {
-      KEY_CACHE.set(cacheKey, { ok: false, at: Date.now() });
-      return { ok: false, reason: "expired" };
-    }
-    const fps = row.device_fingerprints || [];
-    if (!fps.includes(fp)) {
-      const maxDev = row.max_devices ?? 1;
-      if (fps.length >= maxDev) {
-        KEY_CACHE.set(cacheKey, { ok: false, at: Date.now() });
-        return { ok: false, reason: "device_limit_reached" };
-      }
-      try {
-        await fetch(
-          `${SUPABASE_URL_ENV}/rest/v1/access_keys?key=eq.${encodeURIComponent(key)}`,
-          {
-            method: "PATCH",
-            headers: {
-              apikey: SUPABASE_SRK,
-              Authorization: `Bearer ${SUPABASE_SRK}`,
-              "Content-Type": "application/json",
-              Prefer: "return=minimal",
-            },
-            body: JSON.stringify({
-              device_fingerprints: [...fps, fp],
-              updated_at: new Date().toISOString(),
-            }),
-            signal: AbortSignal.timeout(3000),
-          },
-        );
-      } catch (_) {
-        // best-effort — allow this request regardless
-      }
-    }
-    const label = row.label || "User";
-    KEY_CACHE.set(cacheKey, { ok: true, at: Date.now(), label });
-    return { ok: true, label, keyMasked: maskKey(key) };
-  } catch (_e) {
-    return { ok: false, reason: "lookup_error" };
-  }
+    return { ok: false, reason: r.status >= 500 ? "lookup_failed" : String(d.code || "lookup_failed") };
+  } catch { return { ok: false, reason: "lookup_error" }; }
 }
 
 // ---- Telegram admin broadcast (fire-and-forget) ----------------------------
@@ -1614,7 +1522,7 @@ async function buildForUsername(username: string, pages = 4, lite = false) {
       data.items = [...data.items]
         .sort((a: any, b: any) => (Number(b.takenAt) || 0) - (Number(a.takenAt) || 0))
         .slice(0, SEARCH_MAX_ITEMS);
-      const stats = await statsPromise;
+      const stats = await boundedEnrichment(statsPromise, new Map<string, { views: number; likes: number; comments: number }>());
       const filled = applyTimelineStats(data.items, stats);
       console.log(JSON.stringify({ event: "zyla_stats_backfill", username, items: data.items.length, known: stats.size, filled }));
       return {
@@ -2085,7 +1993,7 @@ Deno.serve(async (req) => {
 
   if (!body.force) {
     const mem = CACHE.get(myKey) || (lite ? CACHE.get(fullKey) : undefined);
-    if (mem && Date.now() - mem.at < CACHE_TTL_MS) {
+    if (mem && Date.now() - mem.at < CACHE_TTL_MS && !payloadMediaExpired(mem.payload)) {
       const out = lite
         ? { ...mem.payload, reels: (mem.payload.reels || []).slice(0, 15), posts: (mem.payload.posts || []).slice(0, 15) }
         : mem.payload;

@@ -32,4 +32,3 @@
 - Detect signed media expiry (`exp`/`oe` stamps) on stored reels and in scraper cache payloads; refresh only media links by `sourceId` and never serve expired cached payloads, so cloned thumbnails do not turn into "No preview" hours later.
 - Backfill ZylaLabs items' missing views/likes/comments by shortcode from Instagram's public profile JSON (latest posts only), because ZylaLabs never reports view counts.
 - Fill missing cloned-reel views with a stable per-sourceId estimate (~10K, flagged `viewsEstimated`) that real scraped views or user edits replace, because some providers never report views.
-- After every code change, run scripts/sync-drive-source-branch.py (GITHUB_TOKEN) so the VPS watcher refreshes the Instagram Drive ZIP the same day; Lovable commits do not reach seondprojet by themselves.

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { getDeviceFingerprint, clearAuthSession, getAuthSession } from "@/lib/auth";
+import { shouldEndKeySession } from "@/lib/keyValidation";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
@@ -47,10 +48,10 @@ export default function KeyGuard({ children }: { children: React.ReactNode }) {
 
                 const data = await res.json().catch(() => ({}));
 
-                if (!mounted) return;
+                if (!mounted || getAuthSession()?.key !== session.key || getAuthSession()?.deviceFingerprint !== session.deviceFingerprint) return;
 
                 // Log out exactly when the key's validity period ends.
-                if (res.ok && data?.expires_at) {
+                if (res.ok && data?.valid === true && data?.expires_at) {
                     const ms = new Date(data.expires_at).getTime() - Date.now();
                     if (expiryTimerRef.current) window.clearTimeout(expiryTimerRef.current);
                     if (ms <= 0) {
@@ -69,7 +70,7 @@ export default function KeyGuard({ children }: { children: React.ReactNode }) {
                     // Logout only when the server explicitly identifies the key
                     // itself as invalid, revoked, or past its stored expiry.
                     const rejectionCode = String(data?.code || "");
-                    const definitiveFailure = ["invalid_key", "deactivated", "expired"].includes(rejectionCode);
+                    const definitiveFailure = shouldEndKeySession(res.status, data);
                     if (definitiveFailure) {
                         console.log(`[KeyGuard] Key ${rejectionCode} — logging out`);
                         clearAuthSession();

@@ -723,6 +723,10 @@ export type Database = {
         Args: { p_expires_at: string; p_key_code: string; p_order_id: string }
         Returns: undefined
       }
+      validate_and_bind_access_key: {
+        Args: { p_device_fp: string; p_key: string }
+        Returns: Json
+      }
     }
     Enums: {
       [_ in never]: never

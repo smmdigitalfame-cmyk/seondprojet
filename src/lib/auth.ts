@@ -4,6 +4,7 @@
  */
 
 import { isInstagramAccessKey } from '../../supabase/functions/_shared/access-key-format';
+import { shouldEndKeySession } from './keyValidation';
 
 const AUTH_STORAGE_KEY = "darksidex_auth_session";
 const DEVICE_ID_KEY = "darksidex_device_id";
@@ -41,7 +42,8 @@ function persistDeviceId(id: string) {
 }
 
 export function getDeviceFingerprint(): string {
-    const existingId = localStorage.getItem(DEVICE_ID_KEY);
+    let existingId: string | null = null;
+    try { existingId = localStorage.getItem(DEVICE_ID_KEY); } catch {}
     if (existingId) {
         persistDeviceId(existingId);
         return existingId;
@@ -213,8 +215,8 @@ export async function validateStoredSession(): Promise<boolean> {
         });
         const data = await result.json().catch(() => ({}));
         if (result.ok && data?.valid === true) return true;
-        const rejectionCode = String(data?.code || "");
-        if (["invalid_key", "deactivated", "expired"].includes(rejectionCode)) {
+        if (getAuthSession()?.key !== session.key || getAuthSession()?.deviceFingerprint !== session.deviceFingerprint) return !!getAuthSession();
+        if (shouldEndKeySession(result.status, data)) {
             clearAuthSession();
             return false;
         }
@@ -250,8 +252,8 @@ export async function revalidateStoredSession(): Promise<boolean> {
         });
         const data = await result.json().catch(() => ({}));
         if (result.ok && data?.valid === true) return true;
-        const rejectionCode = String(data?.code || "");
-        if (["invalid_key", "deactivated", "expired"].includes(rejectionCode)) {
+        if (getAuthSession()?.key !== session.key || getAuthSession()?.deviceFingerprint !== session.deviceFingerprint) return !!getAuthSession();
+        if (shouldEndKeySession(result.status, data)) {
             clearAuthSession();
             return false;
         }

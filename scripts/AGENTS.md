@@ -2,4 +2,4 @@
 - Build product archives with source-package-policy.py and include a revision/hash manifest; excluding credentials, repository metadata and generated output prevents unsafe AI handoffs.
 - Keep the central sales bot in the Instagram package and the independent issuer in TikTok; duplicated webhook registration would divert buyer payments.
 - Code backup jobs may update only their private staging and Drive folders; never deploy, restart services or export customer data implicitly.
-- Fingerprint deployed files read-only and include them under VPS-DEPLOYED separately from repository source; this captures VPS changes without replacing editable code or copying private settings.
+- Fingerprint deployed files read-only and include them under VPS-DEPLOYED separately from repository source; this captures VPS changes without replacing editable code or copying private settings.- After every code change run sync-drive-source-branch.py; Lovable commits never reach seondprojet, so Drive ZIPs would go stale.

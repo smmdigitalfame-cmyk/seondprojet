@@ -71,6 +71,13 @@
       "when": 1794366977676,
       "tag": "0010_binance_plan_price_receipts",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1795429652164,
+      "tag": "0011_atomic_access_device_check",
+      "breakpoints": true
     }
   ]
 }

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getAuthSession, getDeviceFingerprint, clearAuthSession } from "@/lib/auth";
 import { instagramFailureMessage } from "@/lib/instagramFailure";
+import { shouldEndKeySession } from "@/lib/keyValidation";
+import { isMediaUrlExpired } from "@/lib/mediaExpiry";
 
 export interface InstaProfile {
   username: string;
@@ -110,6 +112,7 @@ export const clearInstagramCache = (username?: string) => {
 // In-flight request coalescing: if 100 components ask for the same username at
 // the same time, only 1 network request is made and all of them share the result.
 const inflight = new Map<string, Promise<InstaScrapeResult>>();
+const completed = new Map<string, { at: number; data: InstaScrapeResult }>();
 
 // ---- Foreground priority gate -------------------------------------------
 // The discover feed fires ~20 parallel scrapes. The browser only allows ~6
@@ -172,8 +175,13 @@ export async function fetchInstagramData(
   const u = username.trim().replace(/^@/, "").toLowerCase();
   // Cursor requests are unique per call — never coalesce them.
   const key = opts.cursor
-    ? `${u}::${type}::cursor:${opts.cursor.slice(0, 24)}`
-    : `${u}::${type}::p${opts.pages ?? 1}::${opts.force ? "f" : ""}`;
+    ? `${getCacheScope()}::${u}::${type}::cursor:${opts.cursor}`
+    : `${getCacheScope()}::${u}::${type}::${opts.pages === 1 ? "cache-only" : "full"}::${opts.force ? "f" : ""}`;
+  const previous = completed.get(key);
+  if (!opts.force && !opts.cursor && previous && Date.now() - previous.at < 60_000 &&
+    [...(previous.data.reels || []), ...(previous.data.posts || [])].every((item) => !isMediaUrlExpired(item.thumbnail) && !isMediaUrlExpired(item.videoUrl))) {
+    return previous.data;
+  }
   const existing = inflight.get(key);
   if (existing) return existing;
 
@@ -230,8 +238,8 @@ export async function fetchInstagramData(
         const t = await res.text();
         let rejectionReason = "";
         try { rejectionReason = String(JSON.parse(t)?.reason || ""); } catch (_) {}
-        const definitiveKeyFailure = ["invalid_key", "deactivated", "expired"].includes(rejectionReason);
-        if (res.status === 401 && definitiveKeyFailure) {
+        const definitiveKeyFailure = shouldEndKeySession(res.status, { valid: false, code: rejectionReason });
+        if (res.status === 401 && definitiveKeyFailure && getAuthSession()?.key === _session.key && getAuthSession()?.deviceFingerprint === _session.deviceFingerprint) {
           try { clearAuthSession(); } catch (_) {}
           if (typeof window !== "undefined" && window.location.pathname !== "/") window.location.href = "/";
         }
@@ -282,6 +290,10 @@ export async function fetchInstagramData(
       if (raw && "_debug" in raw) {
         if (raw._debug) console.debug(`[ig-scraper] _debug`, raw._debug);
         delete raw._debug;
+      }
+      if (!opts.cursor && raw?.profile?.username) {
+        completed.set(key, { at: Date.now(), data: raw });
+        if (completed.size > 10) { const oldest = completed.keys().next().value; if (oldest) completed.delete(oldest); }
       }
       return raw as InstaScrapeResult;
     } finally {
