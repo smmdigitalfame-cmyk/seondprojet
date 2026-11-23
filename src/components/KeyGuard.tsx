@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { getDeviceFingerprint, clearAuthSession, getAuthSession } from "@/lib/auth";
-import { shouldEndKeySession } from "@/lib/keyValidation";
+import { shouldEndKeySession, sameKeySession } from "@/lib/keyValidation";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
@@ -48,7 +48,7 @@ export default function KeyGuard({ children }: { children: React.ReactNode }) {
 
                 const data = await res.json().catch(() => ({}));
 
-                if (!mounted || getAuthSession()?.key !== session.key || getAuthSession()?.deviceFingerprint !== session.deviceFingerprint) return;
+                if (!mounted || !sameKeySession(getAuthSession(), session)) return;
 
                 // Phone time is only a scheduling hint. Only server-confirmed
                 // expiry may log out a paid user (phones can have wrong clocks).

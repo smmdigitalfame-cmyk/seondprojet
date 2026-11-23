@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { proxyPrimaryKeyRequest, isPrimaryKeyServer } from '../_shared/key-authority.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -23,7 +24,10 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return new Response("Method not allowed", { status: 405, headers: corsHeaders });
 
   try {
-    const body = await req.json().catch(() => ({}));
+    const raw = await req.text();
+    const primary = await proxyPrimaryKeyRequest('claim-key-by-phone', raw, isPrimaryKeyServer(Deno.env.get('SUPABASE_URL') || ''));
+    if (primary) return new Response(await primary.text(), { status: primary.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    const body = JSON.parse(raw || '{}');
     const deviceFp = String(body.device_fp || "").trim();
     const createdAfterRaw = String(body.created_after || "").trim();
     const createdAfterIso = createdAfterRaw && !Number.isNaN(Date.parse(createdAfterRaw))

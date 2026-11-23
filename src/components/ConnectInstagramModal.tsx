@@ -37,9 +37,9 @@ const ConnectInstagramModal = ({ open, onOpenChange, onConnected, onDisconnected
     }
     setLoading(true);
     try {
-      const res = await fetchInstagramData(clean, "profile");
+      const res = await fetchInstagramData(clean, "all");
       if (!res.profileOk || !res.profile?.username) {
-        toast.error("Account not found");
+        toast.error("Account data is temporarily unavailable. Please try again.");
         return;
       }
       setConnectedUsername(clean);

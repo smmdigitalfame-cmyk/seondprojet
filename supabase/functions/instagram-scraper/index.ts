@@ -20,7 +20,7 @@ import { parseProfileHtml, profileCounts } from "./profileCounts.ts";
 import { unavailableResult } from "./resultStatus.ts";
 import { zylaPagination, zylaMedia } from "./zylaPagination.ts";
 import { ZylaProviderError, zylaFailure, preserveZylaFailure } from "./zylaError.ts";
-import { SEARCH_REEL_PAGES, SEARCH_POST_PAGES, SEARCH_MAX_ITEMS, PUBLIC_DISCOVER_USERNAMES, discoverAllowed } from "./searchPolicy.ts";
+import { SEARCH_REEL_PAGES, SEARCH_POST_PAGES, SEARCH_MAX_ITEMS, PUBLIC_DISCOVER_USERNAMES, discoverAllowed, cacheOnlyRequest } from "./searchPolicy.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -1911,7 +1911,7 @@ Deno.serve(async (req) => {
   }
 
   // ---- parse body ----
-  let body: { username?: string; force?: boolean; cursor?: string; pages?: number } = {};
+  let body: { username?: string; force?: boolean; cursor?: string; pages?: number; background?: boolean } = {};
   try {
     body = await req.json();
   } catch (_) {
@@ -1926,7 +1926,8 @@ Deno.serve(async (req) => {
   if (!/^[a-z0-9._]{1,40}$/.test(raw)) {
     return json({ error: "invalid_username" }, 400, { "x-trace-id": traceId });
   }
-  const cursor = typeof body.cursor === "string" ? body.cursor : "";
+  const lite = cacheOnlyRequest(body);
+  const cursor = !lite && typeof body.cursor === "string" ? body.cursor : "";
   const pages = Math.min(Math.max(Number(body.pages) || 4, 1), 30);
 
   // ---- pagination request: only fetch the next reels page ----
@@ -1968,7 +1969,6 @@ Deno.serve(async (req) => {
   // ---- cache lookup ----
   // pages <= 1 is the lightweight request used by the Home feed, stories and
   // the first quick step of a clone: profile + newest posts in a few seconds.
-  const lite = Number(body.pages || 0) === 1;
   const fullKey = `${raw}:full`;
   const liteKey = `${raw}:lite`;
   const myKey = lite ? liteKey : fullKey;
@@ -1994,7 +1994,7 @@ Deno.serve(async (req) => {
     return payload;
   };
 
-  if (!body.force) {
+  if (!body.force || lite) {
     const mem = CACHE.get(myKey) || (lite ? CACHE.get(fullKey) : undefined);
     if (mem && Date.now() - mem.at < CACHE_TTL_MS && !payloadMediaExpired(mem.payload)) {
       const out = lite

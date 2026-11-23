@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { isInstagramAccessKey } from '../_shared/access-key-format.ts';
+import { legacyLicenseResponse, type LegacyResult } from '../_shared/legacy-license-response.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -14,13 +15,6 @@ function json(body: unknown, status = 200) {
   });
 }
 
-type LegacyResult = {
-  status: "valid" | "device_limit" | "expired" | "deactivated" | "invalid" | "unknown";
-  label?: string;
-  expiresAt: string | null;
-  maxDevices?: number;
-};
-
 // Previous app backend that issued the older paid keys.
 const LEGACY_URL = "https://phtlqnljsnwzzqcnmnoz.supabase.co/functions/v1/check-key-status";
 
@@ -33,19 +27,7 @@ async function legacyCheck(key: string, fp: string): Promise<LegacyResult> {
       signal: AbortSignal.timeout(8000),
     });
     const lj = await res.json().catch(() => ({} as any));
-    if (res.status >= 500 || res.status === 429) return { status: "unknown", expiresAt: null };
-    const expiresAt = lj?.expires_at ?? lj?.expiresAt ?? null;
-    const maxRaw = Number(lj?.max_devices ?? lj?.maxDevices ?? 0);
-    const maxDevices = Number.isFinite(maxRaw) && maxRaw > 0 ? Math.min(maxRaw, 20) : undefined;
-    const base = { label: lj?.label, expiresAt, maxDevices };
-    if (res.ok && lj?.valid === true) return { status: "valid", ...base };
-    const code = String(lj?.code || "").toLowerCase();
-    const msg = String(lj?.error || "").toLowerCase();
-    if (code === "device_limit" || /device/.test(msg)) return { status: "device_limit", ...base };
-    if (code === "expired" || /expired/.test(msg)) return { status: "expired", ...base };
-    if (code === "deactivated" || /deactivat|revok/.test(msg)) return { status: "deactivated", ...base };
-    if (code === "invalid_key" || res.status === 404 && /invalid/.test(msg)) return { status: "invalid", ...base };
-    return { status: "unknown", expiresAt: null };
+    return legacyLicenseResponse(res.status, lj);
   } catch {
     return { status: "unknown", expiresAt: null };
   }
@@ -178,6 +160,7 @@ Deno.serve(async (req) => {
             error: lj.status === "expired" ? "This key has expired." : "This key has been deactivated.",
           }, 403);
         }
+        if (lj.status === "invalid") return json({ valid: false, code: 'invalid_key', error: 'The original key is no longer valid.' }, 404);
         if (lj.status !== "unknown") {
           const patch: Record<string, unknown> = { legacy_checked_at: nowIso };
           if (lj.expiresAt) patch.expires_at = lj.expiresAt;

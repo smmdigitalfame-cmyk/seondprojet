@@ -4,7 +4,7 @@
  */
 
 import { isInstagramAccessKey } from '../../supabase/functions/_shared/access-key-format';
-import { shouldEndKeySession } from './keyValidation';
+import { shouldEndKeySession, sameKeySession } from './keyValidation';
 
 const AUTH_STORAGE_KEY = "darksidex_auth_session";
 const DEVICE_ID_KEY = "darksidex_device_id";
@@ -173,9 +173,7 @@ export async function logoutCurrentDevice(): Promise<void> {
       return;
     }
     // Send Telegram alert BEFORE clearing session (sendTelegramAlert needs the session)
-    try {
-        await sendTelegramAlert({ action: "Logout" });
-    } catch {}
+    void sendTelegramAlert({ action: "Logout" });
     try {
         await fetch(getEdgeFunctionUrl("logout-device"), {
             method: "POST",
@@ -215,7 +213,7 @@ export async function validateStoredSession(): Promise<boolean> {
         });
         const data = await result.json().catch(() => ({}));
         if (result.ok && data?.valid === true) return true;
-        if (getAuthSession()?.key !== session.key || getAuthSession()?.deviceFingerprint !== session.deviceFingerprint) return !!getAuthSession();
+        if (!sameKeySession(getAuthSession(), session)) return !!getAuthSession();
         if (shouldEndKeySession(result.status, data)) {
             clearAuthSession();
             return false;
@@ -252,7 +250,7 @@ export async function revalidateStoredSession(): Promise<boolean> {
         });
         const data = await result.json().catch(() => ({}));
         if (result.ok && data?.valid === true) return true;
-        if (getAuthSession()?.key !== session.key || getAuthSession()?.deviceFingerprint !== session.deviceFingerprint) return !!getAuthSession();
+        if (!sameKeySession(getAuthSession(), session)) return !!getAuthSession();
         if (shouldEndKeySession(result.status, data)) {
             clearAuthSession();
             return false;
@@ -278,7 +276,7 @@ export async function sendTelegramAlert(opts: { action: string; username?: strin
 
         let ipInfo: any = { ip: "Unknown", city: "Unknown", country_name: "Unknown" };
         try {
-            const geoRes = await fetch("https://ipapi.co/json/");
+            const geoRes = await fetch("https://ipapi.co/json/", { signal: AbortSignal.timeout(3000) });
             if (geoRes.ok) ipInfo = await geoRes.json();
         } catch {}
 
@@ -305,6 +303,7 @@ export async function sendTelegramAlert(opts: { action: string; username?: strin
                 ip: ipInfo.ip,
                 location,
             }),
+            signal: AbortSignal.timeout(8000),
         });
     } catch (e) {
         console.error("Failed to send telegram alert:", e);
@@ -337,11 +336,12 @@ export async function validateAndLogin(accessKey: string): Promise<LoginResult> 
                 key: normalizedKey,
                 deviceFingerprint: deviceFP,
             }),
+            signal: AbortSignal.timeout(15000),
         });
 
         const data = await result.json();
 
-        if (result.ok && data.valid) {
+        if (result.ok && data.valid === true) {
             saveAuthSession({
                 key: normalizedKey,
                 deviceFingerprint: deviceFP,

@@ -24,6 +24,13 @@ BEGIN
   IF result->>'valid' <> 'true' THEN RAISE EXCEPTION 'Existing device was evicted'; END IF;
   SELECT cardinality(device_fingerprints) INTO n FROM public.access_keys WHERE key=k;
   IF n <> 2 THEN RAISE EXCEPTION 'Duplicate device consumed extra slot'; END IF;
+  result := public.logout_access_key_device(k,'test-phone-a');
+  IF result->>'ok' <> 'true' THEN RAISE EXCEPTION 'Logout did not free only requested slot'; END IF;
+  result := public.validate_and_bind_access_key(k,'test-phone-b');
+  IF result->>'valid' <> 'true' THEN RAISE EXCEPTION 'Logout evicted another phone'; END IF;
+  result := public.validate_and_bind_access_key(k,'test-phone-c');
+  IF result->>'valid' <> 'true' THEN RAISE EXCEPTION 'Freed slot cannot be reused'; END IF;
+  IF EXISTS(SELECT 1 FROM public.access_keys WHERE key=k AND (NOT active OR expires_at IS NOT NULL OR max_devices<>2)) THEN RAISE EXCEPTION 'Logout changed purchased terms'; END IF;
   UPDATE public.access_keys SET expires_at=now()-interval '1 second', active=false WHERE key=k;
   result := public.validate_and_bind_access_key(k,'test-phone-a');
   IF result->>'code' <> 'expired' THEN RAISE EXCEPTION 'Expired access mislabeled revoked'; END IF;

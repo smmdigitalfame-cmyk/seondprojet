@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getAuthSession, getDeviceFingerprint, clearAuthSession } from "@/lib/auth";
 import { instagramFailureMessage } from "@/lib/instagramFailure";
-import { shouldEndKeySession } from "@/lib/keyValidation";
+import { shouldEndKeySession, sameKeySession } from "@/lib/keyValidation";
 import { isMediaUrlExpired } from "@/lib/mediaExpiry";
+import { scrapeRequestPolicy } from './scrapeRequestPolicy';
 
 export interface InstaProfile {
   username: string;
@@ -172,6 +173,7 @@ export async function fetchInstagramData(
   type: InstaScrapeType = "all",
   opts: { force?: boolean; pages?: number; cursor?: string; background?: boolean } = {}
 ): Promise<InstaScrapeResult> {
+  opts = scrapeRequestPolicy(opts);
   const u = username.trim().replace(/^@/, "").toLowerCase();
   // Cursor requests are unique per call — never coalesce them.
   const key = opts.cursor
@@ -239,7 +241,7 @@ export async function fetchInstagramData(
         let rejectionReason = "";
         try { rejectionReason = String(JSON.parse(t)?.reason || ""); } catch (_) {}
         const definitiveKeyFailure = shouldEndKeySession(res.status, { valid: false, code: rejectionReason });
-        if (res.status === 401 && definitiveKeyFailure && getAuthSession()?.key === _session.key && getAuthSession()?.deviceFingerprint === _session.deviceFingerprint) {
+        if (res.status === 401 && definitiveKeyFailure && sameKeySession(getAuthSession(), _session)) {
           try { clearAuthSession(); } catch (_) {}
           if (typeof window !== "undefined" && window.location.pathname !== "/") window.location.href = "/";
         }
@@ -414,7 +416,7 @@ export function useInstagramData(usernameArg?: string, type: InstaScrapeType = "
       if (!isBackground) setLoading(true);
       setError(null);
       try {
-        const next = await fetchInstagramData(username, type, { force });
+        const next = await fetchInstagramData(username, type, force ? { force: true } : { background: true, pages: 1 });
         if (reqRef.current !== reqId) return;
         try {
           writeCache(key, next);

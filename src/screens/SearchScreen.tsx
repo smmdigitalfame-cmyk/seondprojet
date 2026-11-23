@@ -168,7 +168,7 @@ const SearchScreen = () => {
       const data = await fetchInstagramData(u, "all", { pages: 2 });
       if (seq !== searchSeq.current) return;
       if (!data?.profile?.username) {
-        if (!cached) setError("User not found. Username check karo.");
+        if (!cached) setError("Account data is temporarily unavailable. Please try again.");
       } else {
         setResult(data);
         writeSearchCache(u, data);

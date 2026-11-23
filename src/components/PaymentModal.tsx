@@ -1,17 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import { X, Check, Loader2 } from "lucide-react";
-import { saveAuthSession, getDeviceFingerprint } from "@/lib/auth";
+import { validateAndLogin, getDeviceFingerprint } from "@/lib/auth";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-export type Plan = { id: string; days: number; price: number; label: string; buttonId: string };
+export type Plan = { id: string; days: number | null; price: number; label: string; buttonId: string };
 
 export const PLANS: Plan[] = [
   { id: "1", days: 1, price: 199, label: "1 Day", buttonId: "pl_Szret3tn4QzNRk" },
   { id: "7", days: 7, price: 999, label: "Weekly", buttonId: "pl_Szri1mlLfjfYNQ" },
   { id: "30", days: 30, price: 2999, label: "Monthly", buttonId: "pl_SzrivSopG1M4nG" },
-  { id: "lifetime", days: 36500, price: 5999, label: "Lifetime", buttonId: "pl_SzrjjgYhh9IYqD" },
+  { id: "lifetime", days: null, price: 5999, label: "Lifetime", buttonId: "pl_SzrjjgYhh9IYqD" },
 ];
 
 export function RazorpayButton({ buttonId, deviceFp }: { buttonId: string; deviceFp: string }) {
@@ -129,12 +129,16 @@ export default function PaymentModal({
   // Polls claim-key-by-phone with device_fp — moment webhook drops the key
   // for THIS device, we detect → save session → auto-login.
   useEffect(() => {
-    if (step !== "pay") return;
+    if (!open || step !== "pay") return;
     const fp = deviceFp.current;
     if (!fp) return;
     setAutoStatus("watching");
     let attempts = 0;
-    const tick = async () => {
+  let running = false;
+  let cancelled = false;
+  const tick = async () => {
+      if (running || cancelled) return;
+      running = true;
       attempts++;
       if (attempts > 100) {
         if (pollRef.current) {
@@ -142,6 +146,7 @@ export default function PaymentModal({
           pollRef.current = null;
         }
         setAutoStatus("idle");
+        running = false;
         return;
       }
       try {
@@ -151,41 +156,40 @@ export default function PaymentModal({
           body: JSON.stringify({ device_fp: fp, created_after: paymentStartedRef.current }),
         });
         const data = await res.json();
+        if (cancelled) return;
+        if (!res.ok) throw new Error(data?.error || 'Key verification temporarily unavailable. Do not pay again.');
         if (data?.found && data.key) {
+          const login = await validateAndLogin(data.key);
+          if (cancelled) return;
+          if (!login.success) {
+            setError('error' in login ? login.error : 'Access verification failed. Do not pay again.');
+            return;
+          }
           if (pollRef.current) {
             window.clearInterval(pollRef.current);
             pollRef.current = null;
           }
           setAutoStatus("found");
-          const saved = saveAuthSession({
-            key: data.key,
-            deviceFingerprint: fp,
-            loginAt: new Date().toISOString(),
-          });
-          if (saved) {
-            setStep("success");
-            setTimeout(() => onSuccessRef.current(), 900);
-          } else {
-            setAutoStatus("idle");
-            setError("Aapne is key se logout kar diya tha. Dobara login ke liye new subscription lena hoga.");
-            setStep("plan");
-          }
+          setStep("success");
+          setTimeout(() => onSuccessRef.current(), 900);
         }
-      } catch {
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Verification temporarily unavailable. Do not pay again.');
         // keep polling
-      }
+      } finally { running = false; }
     };
     // first check after 2s, then every 3s
     const first = window.setTimeout(tick, 2000);
     pollRef.current = window.setInterval(tick, 3000);
     return () => {
+      cancelled = true;
       window.clearTimeout(first);
       if (pollRef.current) {
         window.clearInterval(pollRef.current);
         pollRef.current = null;
       }
     };
-  }, [step]);
+  }, [step, open]);
 
   function selectPlan(plan: Plan) {
     setError("");
@@ -239,7 +243,7 @@ export default function PaymentModal({
                     <div className="text-left">
                       <div className="font-bold text-slate-900">{plan.label}</div>
                       <div className="text-xs text-slate-500">
-                        Valid for {plan.days} day{plan.days > 1 ? "s" : ""}
+                        {plan.days === null ? 'Lifetime access' : `Valid for ${plan.days} day${plan.days > 1 ? 's' : ''}`}
                         {!plan.buttonId && " · Coming soon"}
                       </div>
                     </div>

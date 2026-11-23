@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { proxyPrimaryKeyRequest, isPrimaryKeyServer } from '../_shared/key-authority.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -51,7 +52,10 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const body = await req.json().catch(() => ({}));
+    const raw = await req.text();
+    const primary = await proxyPrimaryKeyRequest('tg-get-key', raw, isPrimaryKeyServer(Deno.env.get('SUPABASE_URL') || ''));
+    if (primary) return new Response(await primary.text(), { status: primary.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    const body = JSON.parse(raw || '{}');
     const initData = String(body?.init_data || "").trim();
     const botToken = Deno.env.get("TELEGRAM_BOT_TOKEN") || "";
     if (!initData || !botToken) {

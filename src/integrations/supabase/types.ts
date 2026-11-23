@@ -714,6 +714,10 @@ export type Database = {
         }
         Returns: string
       }
+      logout_access_key_device: {
+        Args: { p_device_fp: string; p_key: string }
+        Returns: Json
+      }
       public_bot_totals: { Args: never; Returns: Json }
       record_public_bot_event: {
         Args: { p_id: string; p_kind: string }

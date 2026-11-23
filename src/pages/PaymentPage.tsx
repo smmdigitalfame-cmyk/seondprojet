@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { getTelegramChatId, getTelegramUser, isInTelegram, initTelegramApp } from "@/lib/telegram";
-import { saveAuthSession, getDeviceFingerprint } from "@/lib/auth";
+import { validateAndLogin } from "@/lib/auth";
 import HelpSheet from "@/components/HelpSheet";
 
 // Razorpay Payment Button IDs (Razorpay Dashboard → Payment Button me banaye)
@@ -121,15 +121,12 @@ export default function PaymentPage() {
         body: JSON.stringify({ init_data: initData }),
       });
       const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'Key verification temporarily unavailable. Do not pay again.');
       if (data?.found && data.key) {
-        const saved = saveAuthSession({
-          key: data.key,
-          deviceFingerprint: getDeviceFingerprint(),
-          loginAt: new Date().toISOString(),
-        });
-        if (!saved) {
-          setCheckStatus("not_found");
-          setCheckMsg("");
+        const login = await validateAndLogin(data.key);
+        if (!login.success) {
+          setCheckStatus("error");
+          setCheckMsg('error' in login ? login.error : 'Access verification failed. Do not pay again.');
           return;
         }
         setCheckStatus("success");
@@ -264,12 +261,12 @@ export default function PaymentPage() {
               <div className="rounded-xl border-2 border-amber-500/50 bg-amber-500/10 p-4 text-center space-y-2">
                 <div className="text-2xl">⚠️</div>
                 <div className="text-sm font-bold text-amber-700 dark:text-amber-400">
-                  Abhi tak payment nahi hua
+                  अभी कोई चालू access key नहीं मिली
                 </div>
                 <p className="text-xs text-amber-700/80 dark:text-amber-400/80 leading-relaxed">
                   Tumhari Telegram ID <code className="bg-amber-500/20 px-1 rounded">{chatId}</code> ke liye koi active key nahi mili.
                   <br />
-                  <span className="font-semibold">Pehle upar koi plan select karke pay karo,</span> phir ye button dabao.
+                  <span className="font-semibold">अगर payment हो चुका है तो दोबारा न दें;</span> अपनी key और उसकी वैधता support से जाँचें।
                 </p>
                 <p className="text-[10px] text-amber-700/70 dark:text-amber-400/70 pt-1">
                   Already pay kar diya? 30 second wait karke dobara try karo — webhook process hone me time lagta hai.

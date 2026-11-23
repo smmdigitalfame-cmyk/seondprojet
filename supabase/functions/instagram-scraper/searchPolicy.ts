@@ -2,6 +2,9 @@
 export const SEARCH_REEL_PAGES = 3;
 export const SEARCH_POST_PAGES = 2;
 export const SEARCH_MAX_ITEMS = 60;
+export function cacheOnlyRequest(body: { pages?: number; background?: boolean }): boolean {
+  return body.pages === 1 || body.background === true;
+}
 // Home mixes every public account any user searched (owner request); this list only seeds it.
 export const PUBLIC_DISCOVER_USERNAMES = [
   'selenagomez', 'therock', 'kyliejenner', 'arianagrande', 'kimkardashian',

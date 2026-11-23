@@ -1,5 +1,5 @@
 import { corsHeaders } from "https://esm.sh/@supabase/supabase-js@2/cors";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { checkPrimaryDevice } from '../_shared/key-authority.ts';
 
 async function sendToAllAdmins(botToken: string, chatIds: string[], text: string) {
   const results = await Promise.allSettled(
@@ -47,21 +47,10 @@ Deno.serve(async (req) => {
     }
 
     // Verify caller owns this key on this device.
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
-    const { data: ak } = await supabase
-      .from("access_keys")
-      .select("key, active, expires_at, device_fingerprints")
-      .eq("key", key)
-      .eq("active", true)
-      .maybeSingle();
-    const fps: string[] = Array.isArray(ak?.device_fingerprints) ? ak!.device_fingerprints : [];
-    const expired = ak?.expires_at ? new Date(ak.expires_at).getTime() <= Date.now() : false;
-    if (!ak || expired || !fps.includes(deviceFp)) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
+    const license = await checkPrimaryDevice(key, deviceFp);
+    if (!license.ok) {
+      return new Response(JSON.stringify({ error: license.error, code: license.code }), {
+        status: license.status,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }

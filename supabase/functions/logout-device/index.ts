@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { proxyPrimaryKeyRequest, isPrimaryKeyServer } from '../_shared/key-authority.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -6,37 +7,15 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-// Live key server (the one the Telegram bot writes to). It is the source of
-// truth for keys, so every app URL (Lovable + Vercel) accepts the same keys.
-const PRIMARY_KEY_SERVER = "https://xkgjifugwislpbczoduy.supabase.co/functions/v1/";
-
-async function forwardToPrimary(name: string, raw: string): Promise<{ status: number; text: string } | null> {
-  if (Deno.env.get("SUPABASE_URL")?.includes("xkgjifugwislpbczoduy")) return null;
-  try {
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 10000);
-    const res = await fetch(PRIMARY_KEY_SERVER + name, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: raw,
-      signal: ctrl.signal,
-    });
-    clearTimeout(t);
-    return { status: res.status, text: await res.text() };
-  } catch {
-    return null;
-  }
-}
-
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return new Response("Method not allowed", { status: 405, headers: corsHeaders });
 
   try {
     const raw = await req.text();
-    const primary = await forwardToPrimary("logout-device", raw);
-    if (primary && primary.status < 300) {
-      return new Response(primary.text, {
+    const primary = await proxyPrimaryKeyRequest('logout-device', raw, isPrimaryKeyServer(Deno.env.get('SUPABASE_URL') || ''));
+    if (primary) {
+      return new Response(await primary.text(), {
         status: primary.status,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -52,46 +31,13 @@ Deno.serve(async (req) => {
       });
     }
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
-
-    // Proof of ownership: caller must supply the key currently bound to
-    // this device fingerprint. Prevents random attackers from revoking
-    // other users' keys via guessed fingerprints.
-    const { data: ak } = await supabase
-      .from("access_keys")
-      .select("key, device_fingerprints, active")
-      .eq("key", key)
-      .eq("active", true)
-      .maybeSingle();
-    const fps: string[] = Array.isArray(ak?.device_fingerprints) ? ak!.device_fingerprints : [];
-    if (!ak || !fps.includes(deviceFp)) {
-      return new Response(JSON.stringify({ ok: false, error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // Logout ends this device session; it must not revoke a paid key before
-    // its expiry. Keep the fingerprint bound so a single-device key can be
-    // used again only on the same licensed device.
-    const { error } = await supabase
-      .from("access_keys")
-      .update({ device_fingerprints: fps.filter((f) => f !== deviceFp), last_seen_at: null, updated_at: new Date().toISOString() })
-      .eq("key", key);
-
-    if (error) {
-      console.error("logout-device update error", error);
-      return new Response(JSON.stringify({ ok: false, error: error.message }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    return new Response(JSON.stringify({ ok: true }), {
-      status: 200,
+    const url = Deno.env.get("SUPABASE_URL"), serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!url || !serviceKey) return new Response(JSON.stringify({ ok: false, code: 'verification_unavailable' }), { status: 503, headers: corsHeaders });
+    const supabase = createClient(url, serviceKey);
+    const { data, error } = await supabase.rpc('logout_access_key_device', { p_key: key, p_device_fp: deviceFp });
+    // The row lock is shared with login: freeing one phone cannot evict another.
+    return new Response(JSON.stringify(error || !data ? { ok: false, code: 'verification_unavailable', error: 'Logout temporarily unavailable.' } : data), {
+      status: error || !data ? 503 : data.ok ? 200 : 401,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {

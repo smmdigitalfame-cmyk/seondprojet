@@ -1,6 +1,8 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
 import { adminWebhookSecret, secureTelegramSecret } from '../_shared/telegram-security.ts';
+import { requestedDeviceLimit } from '../_shared/legacy-plan-terms.ts';
+import { accessIsUsable, accessFailureReason } from '../_shared/public-bot-menu.ts';
 
 function generateKey(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -313,7 +315,11 @@ Deno.serve(async (req) => {
 
       const userName = parts[1];
       const durationInput = parts[2];
-      const maxDevices = parseInt(parts[3] || "1") || 1;
+      const maxDevices = requestedDeviceLimit(parts[3] || "1");
+      if (maxDevices === null) {
+        await sendToAllAdmins(botToken, adminChatIds, "❌ Device count must be a positive whole number.");
+        return new Response("ok", { status: 200 });
+      }
 
       const duration = parseDuration(durationInput);
       if (!duration) {
@@ -384,13 +390,14 @@ Deno.serve(async (req) => {
         return new Response("ok", { status: 200 });
       }
 
-      const activeKeys = keys.filter(k => k.active);
-      const revokedKeys = keys.filter(k => !k.active);
+      const activeKeys = keys.filter(k => accessIsUsable(k));
+      const revokedKeys = keys.filter(k => accessFailureReason(k) === 'revoked');
+      const expiredKeys = keys.filter(k => accessFailureReason(k) === 'expired');
 
       const formatKey = (k: any, i: number) => {
         const devices = k.device_fingerprints?.length || 0;
         const exp = k.expires_at ? new Date(k.expires_at).toLocaleDateString() : "Lifetime";
-        const status = k.active ? "✅" : "🚫";
+        const status = accessIsUsable(k) ? "✅" : accessFailureReason(k) === 'expired' ? "⌛" : "🚫";
         return `${i + 1}. ${status} <b>${k.label}</b>\n   <code>${k.key}</code>\n   📅 ${exp} | 📱 ${devices} device(s)`;
       };
 
@@ -403,6 +410,7 @@ Deno.serve(async (req) => {
       if (revokedKeys.length > 0) {
         msg += `<b>🚫 Revoked (${revokedKeys.length})</b>\n\n${revokedKeys.map(formatKey).join("\n\n")}`;
       }
+      if (expiredKeys.length > 0) msg += `\n\n<b>⌛ Expired (${expiredKeys.length})</b>\n\n${expiredKeys.map(formatKey).join("\n\n")}`;
 
       await sendToAllAdmins(
         botToken,
@@ -509,7 +517,7 @@ Deno.serve(async (req) => {
       }
 
       if (!existing.active) {
-        await sendToAllAdmins(botToken, adminChatIds, `⚠️ Key <code>${targetKey}</code> (${existing.label}) is already revoked.`);
+        await sendToAllAdmins(botToken, adminChatIds, `⚠️ Key <code>${targetKey}</code> (${existing.label}) is already ${accessFailureReason(existing)}.`);
         return new Response("ok", { status: 200 });
       }
 

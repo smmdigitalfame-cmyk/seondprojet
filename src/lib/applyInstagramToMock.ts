@@ -327,10 +327,10 @@ export async function refreshExpiredReelMedia(): Promise<boolean> {
   mediaRefreshAt = Date.now();
   const token = activeCloneToken;
   try {
-    let data = await fetchInstagramData(username, "all", { pages: 30, background: true });
+    const data = await fetchInstagramData(username, "all", { pages: 1, background: true });
     const firstThumb = [...(data.reels ?? []), ...(data.posts ?? [])][0]?.thumbnail;
     if (!firstThumb || isMediaUrlExpired(proxyIgImage(firstThumb) || firstThumb)) {
-      data = await fetchInstagramData(username, "all", { pages: 30, force: true, background: true });
+      return false; // Only a new user search/clone may refresh expired provider data.
     }
     if (token !== activeCloneToken) return false;
     if ((data.profile?.username || "").toLowerCase() !== username.toLowerCase()) return false;
@@ -413,10 +413,11 @@ export async function refreshConnectedAvatar(): Promise<void> {
     }
   }
   if (!dataUrl || (currentUser.username || "").toLowerCase() !== username.toLowerCase()) return;
+  const avatarData = dataUrl;
   setCachedAvatar(username, dataUrl);
   const prev = currentUser.avatar;
   Object.values(mockAccounts).forEach((acc) => {
-    if (acc.profile === currentUser || acc.profile.avatar === prev) acc.profile.avatar = dataUrl!;
+    if (acc.profile === currentUser || acc.profile.avatar === prev) acc.profile.avatar = avatarData;
   });
   currentUser.avatar = dataUrl;
   saveProfileOverrides();

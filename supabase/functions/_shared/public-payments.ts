@@ -38,16 +38,20 @@ export async function deliverOrder(id: string, resend = false) {
     const { error: saved } = await db.rpc('save_tiktok_order_key', { p_order_id: id, p_key_code: access.key, p_expires_at: access.expires_at });
     if (saved) throw new Error('TikTok key save failed');
     await sendPurchasedApk(botCall, order.telegram_chat_id, access, 'tiktok');
-    const { error: delivered } = await db.from('oxapay_orders').update({ delivered_at: new Date().toISOString() }).eq('id', id);
-    if (delivered) throw new Error('Delivery status could not be saved');
+    if (!order.delivered_at) {
+      const { error: delivered } = await db.from('oxapay_orders').update({ delivered_at: new Date().toISOString() }).eq('id', id).is('delivered_at', null);
+      if (delivered) throw new Error('Delivery status could not be saved');
+    }
     return;
   }
   if (!order.access_key_id) throw new Error('Paid access unavailable');
   const { data: access, error: keyError } = await db.from('access_keys').select('key,expires_at').eq('id', order.access_key_id).single();
   if (keyError || !access) throw new Error('Paid access unavailable');
   await sendPurchasedApk(botCall, order.telegram_chat_id, access);
-  const { error: saveError } = await db.from('oxapay_orders').update({ delivered_at: new Date().toISOString() }).eq('id', id);
-  if (saveError) throw new Error('Delivery status could not be saved');
+  if (!order.delivered_at) {
+    const { error: saveError } = await db.from('oxapay_orders').update({ delivered_at: new Date().toISOString() }).eq('id', id).is('delivered_at', null);
+    if (saveError) throw new Error('Delivery status could not be saved');
+  }
 }
 export async function verifyAndFulfill(orderId: string) {
   const db = paymentDb();

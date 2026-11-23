@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { legacyPlanFromAmount as planFromAmount, legacySourcePlanMatchesAmount, purchasedExpiry } from '../_shared/legacy-plan-terms.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -10,20 +11,6 @@ function generateKey(): string {
   const part = () =>
     Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
   return `${part()}-${part()}-${part()}`;
-}
-
-// Map amount (in paise) to plan days
-function planFromAmount(amountPaise: number): { days: number; label: string } | null {
-  const rupees = Math.round(amountPaise / 100);
-  if (rupees === 149) return { days: 1, label: "1 Day" };
-  if (rupees === 599) return { days: 7, label: "Weekly" };
-  if (rupees === 1199) return { days: 30, label: "Monthly" };
-  if (rupees === 3499) return { days: 36500, label: "Lifetime" };
-  if (rupees === 50) return { days: 1, label: "1 Day (Test)" };
-  if (rupees === 100) return { days: 1, label: "1 Day" };
-  if (rupees === 500) return { days: 7, label: "7 Days" };
-  if (rupees === 1000) return { days: 30, label: "30 Days" };
-  return null;
 }
 
 async function verifySignature(rawBody: string, signature: string, secret: string): Promise<boolean> {
@@ -98,15 +85,7 @@ function planIdFromSource(source: string): string {
 }
 
 function sourcePlanMatchesAmount(source: string, amountPaise: number): boolean {
-  const planId = planIdFromSource(source);
-  const rupees = Math.round(amountPaise / 100);
-  const expected: Record<string, number[]> = {
-    "1": [149, 100],
-    "7": [599, 500],
-    "30": [1199, 1000],
-    lifetime: [3499],
-  };
-  return Boolean(planId && expected[planId]?.includes(rupees));
+  return legacySourcePlanMatchesAmount(planIdFromSource(source), amountPaise);
 }
 
 Deno.serve(async (req) => {
@@ -223,6 +202,11 @@ Deno.serve(async (req) => {
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
+  // Check settled payments BEFORE consuming contact links or reading new notes.
+  // A callback retry never changes the paid key, its phones or delivery owner.
+  const { data: settled, error: settledError } = await supabase.from('access_keys').select('key').eq('razorpay_payment_id', paymentId).maybeSingle();
+  if (settledError) return new Response(JSON.stringify({ ok: false, error: 'Payment lookup temporarily unavailable.' }), { status: 503, headers: corsHeaders });
+  if (settled) return new Response(JSON.stringify({ ok: true, duplicate: true }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   // Payment Buttons sometimes drop hidden notes. Fallback: match Razorpay contact/email
   // to the Telegram user who filled the payment page just before paying.
@@ -367,54 +351,6 @@ Deno.serve(async (req) => {
     });
   }
 
-  // 2. Dedupe — if this payment_id already processed, skip
-  const { data: existing } = await supabase
-    .from("access_keys")
-    .select("key, label, expires_at, telegram_chat_id, device_fingerprints")
-    .eq("razorpay_payment_id", paymentId)
-    .maybeSingle();
-
-  if (existing) {
-    console.log("Duplicate webhook for payment:", paymentId);
-    let dupSent = false;
-    const deliveryChatId = existing.telegram_chat_id || chatId || "";
-    const existingDevices: string[] = existing.device_fingerprints || [];
-    const updateExisting: Record<string, unknown> = { updated_at: new Date().toISOString() };
-    if (deliveryChatId && !existing.telegram_chat_id) updateExisting.telegram_chat_id = deliveryChatId;
-    if (resolvedDeviceFp && !existingDevices.includes(resolvedDeviceFp)) {
-      updateExisting.device_fingerprints = Array.from(new Set([...existingDevices, resolvedDeviceFp]));
-    }
-    if (Object.keys(updateExisting).length > 1) {
-      await supabase.from("access_keys").update(updateExisting).eq("razorpay_payment_id", paymentId);
-    }
-    if (botToken && deliveryChatId) {
-      // Re-deliver the existing key in case user lost it
-      const expLine = existing.expires_at
-        ? `📅 <b>Expiry:</b> ${new Date(existing.expires_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}`
-        : "📅 <b>Expiry:</b> Lifetime";
-      dupSent = await sendTelegram(
-        botToken,
-        deliveryChatId,
-        `♻️ <b>Your existing key</b>\n\n🔑 <code>${existing.key}</code>\n${expLine}`
-      );
-    }
-    await supabase.from("webhook_logs").insert({
-      payment_id: paymentId,
-      amount_paise: amount,
-      rupees: Math.round(amount / 100),
-      telegram_chat_id: deliveryChatId || null,
-      generated_key: existing.key,
-      plan_label: existing.label,
-      expires_at: existing.expires_at,
-      status: "duplicate",
-      telegram_sent: dupSent,
-    });
-    return new Response(JSON.stringify({ ok: true, duplicate: true }), {
-      status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-
   // 3. Detect plan
   const plan = planFromAmount(amount);
   if (!plan) {
@@ -461,7 +397,7 @@ Deno.serve(async (req) => {
   // 4. Generate key
   const key = generateKey();
   const now = new Date();
-  const expiresAt = new Date(now.getTime() + plan.days * 24 * 60 * 60 * 1000).toISOString();
+  const expiresAt = purchasedExpiry(plan.days, now.getTime());
   const label = chatId ? `tg:${chatId}` : `rzp:${paymentId}`;
 
   const { error: insertErr } = await supabase.from("access_keys").insert({
@@ -506,11 +442,11 @@ Deno.serve(async (req) => {
   if (botToken) {
     const admins = getAdminChatIds();
     adminIdsUsed = admins;
-    const expFmt = new Date(expiresAt).toLocaleString("en-IN", {
+    const expFmt = expiresAt ? new Date(expiresAt).toLocaleString("en-IN", {
       timeZone: "Asia/Kolkata",
       day: "2-digit", month: "short", year: "numeric",
       hour: "2-digit", minute: "2-digit",
-    });
+    }) : "Lifetime";
     // ── Verification: every admin alert MUST carry payer Gmail, phone,
     //    amount, and the access key tied to THIS payment.
     const verifyKeyMatches = Boolean(key && paymentId);

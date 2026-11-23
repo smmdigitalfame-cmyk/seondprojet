@@ -78,6 +78,13 @@
       "when": 1795429652164,
       "tag": "0011_atomic_access_device_check",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1795430652595,
+      "tag": "0012_atomic_logout_device",
+      "breakpoints": true
     }
   ]
 }
