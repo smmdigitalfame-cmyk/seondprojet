@@ -17,7 +17,7 @@ import { registerAppWorker } from "./lib/registerAppWorker";
     const ua = navigator.userAgent || "";
     const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
     const standalone = (navigator as any).standalone === true || window.matchMedia("(display-mode: standalone)").matches;
-    if (isIOS && standalone) document.documentElement.classList.add("ios-standalone");
+    if (standalone || isIOS && (navigator as any).standalone === true) document.documentElement.classList.add("ios-standalone");
   } catch {}
 })();
 
