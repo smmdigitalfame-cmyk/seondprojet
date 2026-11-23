@@ -86,7 +86,7 @@ Deno.serve(async (req) => {
     if (!Deno.env.get("SUPABASE_URL")?.includes("xkgjifugwislpbczoduy") && (!primary || primary.status >= 500)) {
       return json({ valid: false, code: "verification_unavailable", error: "Verification temporarily unavailable." }, 503);
     }
-    if (primary && primary.status < 500 && !/"invalid_key"/.test(primary.text) && primary.status !== 400) {
+    if (primary && primary.status < 500) {
       return new Response(primary.text, {
         status: primary.status,
         headers: { ...corsHeaders, "Content-Type": "application/json" },

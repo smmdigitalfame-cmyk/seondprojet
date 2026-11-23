@@ -6,7 +6,7 @@ The existing screen design, login, database, and features are unchanged. The exi
 
 ## What is ready
 
-- Root-scoped manifest with stable id `/`, start URL `/`, standalone display, fullscreen preference, portrait orientation, matching black theme/background, and PNG icons.
+- Root-scoped manifest with stable id `/`, start URL `/`, standalone display (no fullscreen override), portrait orientation and PNG icons. Standalone retains the phone's system status bar.
 - Production-only generated service worker with a fetch handler, network-first navigations, no OAuth/API caching, and no development/preview/iframe registration. Offline data/login are not guaranteed; this is not a full offline application.
 - Public JSON endpoint for Android Digital Asset Links. **It is currently `[]`: the real package name and certificate are still required. It does not yet hide the Android URL bar.**
 
@@ -16,6 +16,12 @@ The existing screen design, login, database, and features are unchanged. The exi
 2. Select **Package for stores → Android → Generate package** (labels may vary). In the Android package options, set app name **Instagram** (or your own name), package ID such as **app.seondprojet.clone** (a suggestion, not yet registered), start URL `https://seondprojet.vercel.app/`, version name `1.0.0`, and version code `1`. Confirm the manifest icons and Android maskable icon. Keep the package ID stable for future updates and increment the version code.
 3. In signing options, generate a new signing key or upload your existing keystore. Store the keystore, alias, and passwords privately with a secure backup; never commit them or paste passwords into chat. Updates must use the appropriate existing signing identity. With Play App Signing, keep the upload key and Google's app-signing certificate roles distinct.
 4. Download the generated package. **APK** is for direct installation on an Android phone; **AAB** is for Play Store upload. This task does not generate either file.
+
+## Keep the phone's status bar in the Telegram APK
+
+The APK currently delivered by Telegram was downloaded and verified byte-for-byte against the supplied Instagram.apk. It is a Chrome WebAPK, already set to `standalone`, opening `https://repo-clone-buddy-16.lovable.app/` and reading that site's `/manifest.webmanifest`. The website's fullscreen-first `display_override` has been removed. Publish the website change, reopen the APK and allow Chrome's manifest update to run; verify the actual system status bar on the phone. No APK was rebuilt or replaced, and uninstalling is not required (it could lose local edits/device identity).
+
+For a different PWABuilder/Bubblewrap package that hardcodes fullscreen, change `display` to `standalone` in its original `twa-manifest.json`, regenerate, increment the version code and sign with the original keystore. A custom WebView wrapper must disable its native immersive flags. Never re-sign an existing app with an unrelated random key; native repackaging requires its original source/signing material.
 
 ## Remove the Android URL bar
 

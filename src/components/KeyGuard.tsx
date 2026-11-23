@@ -50,16 +50,12 @@ export default function KeyGuard({ children }: { children: React.ReactNode }) {
 
                 if (!mounted || getAuthSession()?.key !== session.key || getAuthSession()?.deviceFingerprint !== session.deviceFingerprint) return;
 
-                // Log out exactly when the key's validity period ends.
+                // Phone time is only a scheduling hint. Only server-confirmed
+                // expiry may log out a paid user (phones can have wrong clocks).
                 if (res.ok && data?.valid === true && data?.expires_at) {
                     const ms = new Date(data.expires_at).getTime() - Date.now();
                     if (expiryTimerRef.current) window.clearTimeout(expiryTimerRef.current);
-                    if (ms <= 0) {
-                        clearAuthSession();
-                        window.location.href = "/";
-                        return;
-                    }
-                    if (ms < 2 ** 31 - 1) {
+                    if (ms > 0 && ms < 2 ** 31 - 1) {
                         expiryTimerRef.current = window.setTimeout(() => checkKey(true), ms + 1000);
                     }
                 }

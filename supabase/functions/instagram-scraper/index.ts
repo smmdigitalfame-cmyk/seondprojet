@@ -1534,6 +1534,9 @@ async function buildForUsername(username: string, pages = 4, lite = false) {
         postsHasMore: false, postsNextCursor: "",
       };
     }
+    // A configured primary that returned no usable media is unavailable.
+    // Do not spend another multi-provider timeout (or billed fallback calls).
+    return null;
   }
   const requestedItemCount = lite ? 24 : 350;
   if (!lite) paginationDeadline = Date.now() + PAGINATION_BUDGET_MS;
