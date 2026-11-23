@@ -19,6 +19,7 @@ export type Database = {
           active: boolean
           created_at: string
           device_fingerprints: string[] | null
+          device_last_seen: Json
           expires_at: string | null
           id: string
           key: string
@@ -35,6 +36,7 @@ export type Database = {
           active?: boolean
           created_at?: string
           device_fingerprints?: string[] | null
+          device_last_seen?: Json
           expires_at?: string | null
           id?: string
           key: string
@@ -51,6 +53,7 @@ export type Database = {
           active?: boolean
           created_at?: string
           device_fingerprints?: string[] | null
+          device_last_seen?: Json
           expires_at?: string | null
           id?: string
           key?: string

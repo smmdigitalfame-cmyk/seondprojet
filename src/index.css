@@ -346,22 +346,24 @@ img, video, canvas {
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 }
 
-/* iOS "Add to Home Screen" only: keep content below the status bar / notch.
-   Class is set in main.tsx only for iOS standalone, so Android & browsers are untouched. */
+/* Installed app: keep content below the phone status bar. When the phone hides
+   its own status bar (immersive APK), an in-app bar takes the same space. */
+html.ios-standalone { --app-top: env(safe-area-inset-top, 0px); }
+html.ios-standalone.app-statusbar { --app-top: 26px; }
 html.ios-standalone body {
-  padding-top: env(safe-area-inset-top, 0px);
+  padding-top: var(--app-top);
 }
 html.ios-standalone body::before {
   content: "";
   position: fixed;
   top: 0; left: 0; right: 0;
-  height: env(safe-area-inset-top, 0px);
+  height: var(--app-top);
   background: #000; /* matches the black theme-color status bar */
   z-index: 9999;
   pointer-events: none;
 }
-html.ios-standalone .sticky.top-0 { top: env(safe-area-inset-top, 0px); }
-html.ios-standalone .sticky.top-\[50px\] { top: calc(50px + env(safe-area-inset-top, 0px)); }
-html.ios-standalone .fixed.top-0:not(.inset-0) { top: env(safe-area-inset-top, 0px); }
-html.ios-standalone .fixed.inset-0 { padding-top: env(safe-area-inset-top, 0px); }
+html.ios-standalone .sticky.top-0 { top: var(--app-top); }
+html.ios-standalone .sticky.top-\[50px\] { top: calc(50px + var(--app-top)); }
+html.ios-standalone .fixed.top-0:not(.inset-0) { top: var(--app-top); }
+html.ios-standalone .fixed.inset-0 { padding-top: var(--app-top); }
 html.ios-standalone .fixed.bottom-0 { padding-bottom: env(safe-area-inset-bottom, 0px); }

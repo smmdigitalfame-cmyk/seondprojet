@@ -108,7 +108,7 @@ Deno.serve(async (req) => {
       // Migrate keys issued by the previous app backend. The old system stays
       // the authority for the original plan's validity and device limit.
       const lj = await legacyCheck(normalizedKey, normalizedFp);
-      if (lj.status === "device_limit") return json({ valid: false, code: "device_limit", error: "Device limit reached. Log out on another device first." }, 403);
+      if (lj.status === "device_limit") return json({ valid: false, code: "device_limit", error: "This key is in use on another phone. Log out there first." }, 403);
       if (lj.status === "valid") {
         const exp = lj.expiresAt;
         const nowIso = new Date().toISOString();
@@ -173,7 +173,7 @@ Deno.serve(async (req) => {
 
 
     // Lock the row while checking expiry/revocation and claiming a device slot.
-    // Never evict another licensed phone or increase the purchased slot count.
+    // A phone idle 30+ min hands its slot to a new phone; the slot count never grows.
     const { data, error: bindError } = await supabase.rpc("validate_and_bind_access_key", { p_key: normalizedKey, p_device_fp: normalizedFp });
     if (bindError || !data) return json({ valid: false, code: "verification_unavailable", error: "Verification temporarily unavailable." }, 503);
     return json(data, data.valid ? 200 : 403);

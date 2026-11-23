@@ -11,13 +11,12 @@ import { registerAppWorker } from "./lib/registerAppWorker";
 
 // Anti-inspect protection disabled for Lovable preview compatibility
 
-// iOS home-screen app only: mark html so CSS can respect the notch/status bar
+// Installed app (APK / home screen): mark html so CSS can respect the status bar
 (() => {
   try {
-    const ua = navigator.userAgent || "";
-    const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
     const standalone = (navigator as any).standalone === true || window.matchMedia("(display-mode: standalone)").matches;
-    if (standalone || isIOS && (navigator as any).standalone === true) document.documentElement.classList.add("ios-standalone");
+    const fullscreen = window.matchMedia("(display-mode: fullscreen)").matches;
+    if (standalone || fullscreen) document.documentElement.classList.add("ios-standalone");
   } catch {}
 })();
 

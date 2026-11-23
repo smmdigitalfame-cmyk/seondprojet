@@ -85,6 +85,13 @@
       "when": 1795430652595,
       "tag": "0012_atomic_logout_device",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1795446949803,
+      "tag": "0013_device_idle_takeover",
+      "breakpoints": true
     }
   ]
 }

@@ -11,6 +11,7 @@ import { useState, useCallback, useEffect, lazy, Suspense } from "react";
 import { isAuthenticated, subscribeAuthChanges, revalidateStoredSession } from "@/lib/auth";
 import { isInTelegram, initTelegramApp } from "@/lib/telegram";
 import KeyGuard from "@/components/KeyGuard";
+import InAppStatusBar from "@/components/InAppStatusBar";
 import LoadingRing from "@/components/LoadingRing";
 import HomeScreen from "@/screens/HomeScreen";
 import SearchScreen from "@/screens/SearchScreen";
@@ -135,6 +136,7 @@ const App = () => {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
+        <InAppStatusBar />
         <Toaster />
         <Sonner />
         <BrowserRouter>
